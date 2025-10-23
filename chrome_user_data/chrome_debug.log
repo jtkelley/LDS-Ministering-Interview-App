@@ -1,0 +1,36 @@
+[21760:36752:1019/214455.747:INFO:components\enterprise\browser\controller\chrome_browser_cloud_management_controller.cc:206] No machine level policy manager exists.
+[21760:33868:1019/214458.137:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[21760:33868:1019/214458.137:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[21760:33868:1019/214458.137:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: PHONE_REGISTRATION_ERROR
+[21760:36752:1019/214458.928:INFO:CONSOLE:1] "removing user, although none seem to be currently stored", source: https://op.churchofjesuschrist.org/id.html (1)
+[21760:36752:1019/214508.250:INFO:CONSOLE:0] "[DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o", source: https://id.churchofjesuschrist.org/oauth2/default/v1/authorize?client_id=0oajwqqtpz7f8r1OD357&scope=openid%20profile%20email%20offline_access%20cmisid%20group&response_type=code&redirect_uri=https%3A%2F%2Flcr.churchofjesuschrist.org%2Fapi%2Fauth%2Fcallback&nonce=OzslR5cdT9wGnXig2HoRh-mRG9yxXMs_5k4NRfYsw2E&state=eyJyZXR1cm5UbyI6Imh0dHBzOi8vbGNyLmNodXJjaG9mamVzdXNjaHJpc3Qub3JnL21pbmlzdGVyaW5nIn0&code_challenge=O0iFa0LUpuBWyzHA4Cumg5LABtgYO1BtT_uFFoeKQxo&code_challenge_method=S256 (0)
+[21760:36752:1019/214516.239:INFO:CONSOLE:1] "[okta-auth-sdk] WARN: Saved transaction meta does not match the current configuration. This may indicate that two apps are sharing a storage key.", source: https://id.churchofjesuschrist.org/_next/static/chunks/8469-ef25b860299ab293.js (1)
+[21760:33868:1019/214519.097:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[21760:36752:1019/214519.830:INFO:CONSOLE:2] "Uncaught TypeError: Cannot read properties of null (reading 'style')", source: https://mltp-cdn.churchofjesuschrist.org/main.js (2)
+[36324:25828:1019/214520.148:ERROR:gpu\command_buffer\service\gles2_cmd_decoder_passthrough.cc:1101] [GroupMarkerNotSet(crbug.com/242999)!:A030C200B4220000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader (about:flags#enable-unsafe-swiftshader) flag to opt in to lower security guarantees for trusted content.
+[21760:36752:1019/214520.161:INFO:CONSOLE:0] "[GroupMarkerNotSet(crbug.com/242999)!:A030C200B4220000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader (about:flags#enable-unsafe-swiftshader) flag to opt in to lower security guarantees for trusted content.", source: https://lcr.churchofjesuschrist.org/ministering (0)
+[28200:28428:1019/214520.180:WARNING:net\spdy\spdy_session.cc:2792] Received RST for invalid stream11
+[21760:36752:1019/214520.180:INFO:CONSOLE:1] "rp reports isUSerLoggedIn event, invoking onchanged event", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214520.186:INFO:CONSOLE:1] "In rp.js: Activity was detected. Sun Oct 19 2025 21:45:20 GMT-0600 (Central Standard Time)", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214520.190:INFO:CONSOLE:1] "activityDetected command received. Sun Oct 19 2025 21:45:20 GMT-0600 (Central Standard Time)", source: https://op.churchofjesuschrist.org/op.js (1)
+[21760:36752:1019/214520.191:INFO:CONSOLE:1] "localStorage.user.status === 'ACTIVE'", source: https://op.churchofjesuschrist.org/op.js (1)
+[21760:36752:1019/214520.191:INFO:CONSOLE:1] "ExpiresAt: 2025-10-20T04:43:34.000Z now: Sun Oct 19 2025 21:45:20 GMT-0600 (Central Standard Time)", source: https://op.churchofjesuschrist.org/op.js (1)
+[21760:36752:1019/214520.191:INFO:CONSOLE:1] "IDP Session not within expiration window.  Extending session won't be attempted.", source: https://op.churchofjesuschrist.org/op.js (1)
+[28200:28428:1019/214520.284:WARNING:net\spdy\spdy_session.cc:2792] Received RST for invalid stream13
+[21760:36752:1019/214520.316:INFO:CONSOLE:1] "rp reports isUSerLoggedIn event, invoking onchanged event", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214520.316:INFO:CONSOLE:1] "user info event triggered", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214523.523:INFO:CONSOLE:2] "Uncaught TypeError: Cannot read properties of null (reading 'style')", source: https://mltp-cdn.churchofjesuschrist.org/main.js (2)
+[36324:25828:1019/214523.548:ERROR:gpu\command_buffer\service\gles2_cmd_decoder_passthrough.cc:1101] [GroupMarkerNotSet(crbug.com/242999)!:A090C200B4220000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader (about:flags#enable-unsafe-swiftshader) flag to opt in to lower security guarantees for trusted content.
+[21760:36752:1019/214523.568:INFO:CONSOLE:0] "[GroupMarkerNotSet(crbug.com/242999)!:A090C200B4220000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader (about:flags#enable-unsafe-swiftshader) flag to opt in to lower security guarantees for trusted content.", source: https://lcr.churchofjesuschrist.org/ (0)
+[21760:36752:1019/214523.571:INFO:CONSOLE:1] "rp reports isUSerLoggedIn event, invoking onchanged event", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214523.571:INFO:CONSOLE:1] "user info event triggered", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214523.571:INFO:CONSOLE:2] "mltp: global user info event [object CustomEvent]", source: https://mltp-cdn.churchofjesuschrist.org/main.js (2)
+[21760:36752:1019/214523.576:INFO:CONSOLE:1] "rp reports isUSerLoggedIn event, invoking onchanged event", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214523.576:INFO:CONSOLE:1] "user info event triggered", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214523.576:INFO:CONSOLE:2] "mltp: global user info event [object CustomEvent]", source: https://mltp-cdn.churchofjesuschrist.org/main.js (2)
+[21760:33868:1019/214603.211:ERROR:google_apis\gcm\engine\registration_request.cc:291] Registration response error message: DEPRECATED_ENDPOINT
+[21760:36752:1019/214622.088:INFO:CONSOLE:1] "In rp.js: Activity was detected. Sun Oct 19 2025 21:46:22 GMT-0600 (Central Standard Time)", source: https://op.churchofjesuschrist.org/rp.js (1)
+[21760:36752:1019/214622.088:INFO:CONSOLE:1] "activityDetected command received. Sun Oct 19 2025 21:46:22 GMT-0600 (Central Standard Time)", source: https://op.churchofjesuschrist.org/op.js (1)
+[21760:36752:1019/214622.088:INFO:CONSOLE:1] "localStorage.user.status === 'ACTIVE'", source: https://op.churchofjesuschrist.org/op.js (1)
+[21760:36752:1019/214622.088:INFO:CONSOLE:1] "ExpiresAt: 2025-10-20T04:43:35.000Z now: Sun Oct 19 2025 21:46:22 GMT-0600 (Central Standard Time)", source: https://op.churchofjesuschrist.org/op.js (1)
+[21760:36752:1019/214622.088:INFO:CONSOLE:1] "IDP Session not within expiration window.  Extending session won't be attempted.", source: https://op.churchofjesuschrist.org/op.js (1)

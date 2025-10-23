@@ -1,0 +1,43 @@
+name: ministering-interviews
+services:
+- name: web
+  source_dir: /
+  github:
+    repo: your-username/your-repo  # Replace with your actual repo
+    branch: main
+  run_command: python app.py
+  instance_count: 1
+  instance_size_slug: professional-xs
+  envs:
+  - key: FLASK_ENV
+    value: production
+  - key: SECRET_KEY
+    type: SECRET
+    value: ${SECRET_KEY}  # Set this in DO App Platform
+  - key: MAIL_USERNAME
+    type: SECRET
+    value: ${MAIL_USERNAME}
+  - key: MAIL_PASSWORD
+    type: SECRET
+    value: ${MAIL_PASSWORD}
+  - key: TWILIO_ACCOUNT_SID
+    type: SECRET
+    value: ${TWILIO_ACCOUNT_SID}
+  - key: TWILIO_AUTH_TOKEN
+    type: SECRET
+    value: ${TWILIO_AUTH_TOKEN}
+  - key: TWILIO_PHONE_NUMBER
+    type: SECRET
+    value: ${TWILIO_PHONE_NUMBER}
+  health_check:
+    http_path: /
+  # Allow outbound connections for web scraping
+  outbound_addresses:
+  - 0.0.0.0/0
+
+databases:
+- name: ministering-db
+  engine: PG
+  version: "15"
+  size: professional-xs
+  num_nodes: 1

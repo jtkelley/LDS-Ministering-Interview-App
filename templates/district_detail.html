@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>District Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+        .navbar { background-color: #343a40; color: white; padding: 10px; display: flex; justify-content: flex-start; }
+        .navbar a { color: white; text-decoration: none; margin: 0 15px; }
+        .navbar a:hover { text-decoration: underline; }
+        .content { padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{{ url_for('admin') }}">Calendar</a>
+        <a href="{{ url_for('manage_districts') }}">Manage Districts</a>
+        <a href="{{ url_for('manage_members') }}">Manage Members</a>
+        <a href="{{ url_for('import_companionships') }}">Import Companionships</a>
+        <a href="{{ url_for('send_all_notifications') }}">Send Notifications</a>
+    </div>
+    
+    <div class="content">
+        <h1 class="mb-3">{{ district.name }}</h1>
+        <p class="mb-4">Interviewer: {{ district.interviewer_name }}</p>
+        <div class="mb-3">
+            <a href="{{ url_for('edit_district', id=district.id) }}" class="btn btn-secondary me-2">Edit District</a>
+            <a href="{{ url_for('new_team', id=district.id) }}" class="btn btn-primary me-2">Add Companionship</a>
+            <a href="{{ url_for('manage_slots', id=district.id) }}" class="btn btn-info me-2">Manage Slots</a>
+            <a href="{{ url_for('admin', district=district.id) }}" class="btn btn-success me-2">View Calendar</a>
+            <a href="{{ url_for('send_notifications', district_id=district.id) }}" class="btn btn-warning">Send Notifications</a>
+        </div>
+        <h2 class="mb-3">Companionships</h2>
+        <div class="list-group">
+        {% for team in district.teams %}
+            <div class="list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>Companionship {{ team.id }}</strong>
+                    <div>
+                        <a href="{{ url_for('add_member', team_id=team.id) }}" class="btn btn-sm btn-outline-primary me-2">Add Member</a>
+                        <form method="POST" action="{{ url_for('remove_team', team_id=team.id) }}" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Remove this companionship and all its members?')">Remove Companionship</button>
+                        </form>
+                    </div>
+                </div>
+                <ul class="list-group list-group-flush mt-2">
+                {% for member in team.members %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ member.name }} - {{ member.email }} {% if member.phone %}({{ member.phone }}){% endif %}
+                        <div>
+                            <a href="{{ url_for('edit_member', member_id=member.id) }}" class="btn btn-sm btn-outline-secondary me-2">Edit</a>
+                            <form method="POST" action="{{ url_for('unassign_member', member_id=member.id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-warning" onclick="return confirm('Unassign {{ member.name }} from this companionship?')">Unassign</button>
+                            </form>
+                        </div>
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
+        {% endfor %}
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

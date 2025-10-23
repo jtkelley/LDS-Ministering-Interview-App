@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Manage Members</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+        .navbar { background-color: #343a40; color: white; padding: 10px; display: flex; justify-content: flex-start; }
+        .navbar a { color: white; text-decoration: none; margin: 0 15px; }
+        .navbar a:hover { text-decoration: underline; }
+        .content { padding: 20px; }
+        .filter-section { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{{ url_for('admin') }}">Calendar</a>
+        <a href="{{ url_for('manage_districts') }}">Manage Districts</a>
+        <a href="{{ url_for('manage_members') }}">Manage Members</a>
+        <a href="{{ url_for('import_companionships') }}">Import Companionships</a>
+        <a href="{{ url_for('send_all_notifications') }}">Send Notifications</a>
+    </div>
+    
+    <div class="content">
+        <h1 class="mb-4">Manage All Members</h1>
+        
+        <div class="filter-section">
+            <h5>Filter Members</h5>
+            <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, or phone..." onkeyup="filterMembers()">
+        </div>
+        
+        <div class="alert alert-info">
+            <strong>Tip:</strong> Use this page to reassign members between companionships. Select a new companionship from the dropdown and click "Reassign".
+        </div>
+        
+        <div class="table-responsive">
+            <table class="table table-striped table-hover" id="membersTable">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>District</th>
+                        <th>Companionship</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for member in members %}
+                    <tr {% if not member.team %}class="table-warning"{% endif %}>
+                        <td>{{ member.name }}</td>
+                        <td>{{ member.email }}</td>
+                        <td>{{ member.phone or 'N/A' }}</td>
+                        <td>{{ member.team.district.name if member.team else 'Unassigned' }}</td>
+                        <td>{{ 'Companionship ' + member.team.id|string if member.team else 'Unassigned' }}</td>
+                        <td>
+                            {% if member.team %}
+                            <form method="POST" action="{{ url_for('unassign_member', member_id=member.id) }}" style="display:inline-block;" class="me-2">
+                                <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Unassign {{ member.name }} from companionship?')">Unassign</button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('reassign_member', member_id=member.id) }}" style="display:inline-block;" class="me-2">
+                                <select name="new_team_id" class="form-select form-select-sm d-inline-block w-auto me-2" required>
+                                    <option value="">-- Select Companionship --</option>
+                                    {% for district in districts %}
+                                        <optgroup label="{{ district.name }}">
+                                            {% for team in district.teams %}
+                                                <option value="{{ team.id }}" {% if team.id == member.team_id %}selected{% endif %}>
+                                                    Companionship {{ team.id }}
+                                                </option>
+                                            {% endfor %}
+                                        </optgroup>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Reassign {{ member.name }}? This will cancel any existing interview bookings.')">Reassign</button>
+                            </form>
+                            <a href="{{ url_for('edit_member', member_id=member.id) }}" class="btn btn-sm btn-outline-secondary me-2">Edit</a>
+                            <form method="POST" action="{{ url_for('unassign_member', member_id=member.id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Unassign {{ member.name }} from companionship?')">Unassign</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function filterMembers() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('membersTable');
+            const rows = table.getElementsByTagName('tr');
+            
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                let found = false;
+                
+                for (let j = 0; j < cells.length; j++) {
+                    const cell = cells[j];
+                    if (cell.textContent.toLowerCase().indexOf(filter) > -1) {
+                        found = true;
+                        break;
+                    }
+                }
+                
+                row.style.display = found ? '' : 'none';
+            }
+        }
+    </script>
+</body>
+</html>

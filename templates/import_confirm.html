@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Confirm Import</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f8f9fa; }
+        .navbar { background-color: #343a40; color: white; padding: 10px; display: flex; justify-content: flex-start; }
+        .navbar a { color: white; text-decoration: none; margin: 0 15px; }
+        .navbar a:hover { text-decoration: underline; }
+        .content { padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <a href="{{ url_for('admin') }}">Calendar</a>
+        <a href="{{ url_for('manage_districts') }}">Manage Districts</a>
+        <a href="{{ url_for('scrape_data') }}">Scrape from LCR</a>
+        <a href="{{ url_for('import_csv') }}">Import from CSV</a>
+    </div>
+    
+    <div class="content">
+        <h1 class="mb-4">Confirm Companionship Import</h1>
+        
+        <div class="alert alert-success">
+            <strong>Success!</strong> Found {{ scraped_districts|length }} districts with companionships. Review the data below and confirm import.
+            {% if progress_id %}<br><a href="{{ url_for('download_csv', progress_id=progress_id) }}" class="btn btn-info btn-sm mt-2">Download CSV</a>{% endif %}
+        </div>
+        
+        <form method="POST" action="{{ url_for(confirm_endpoint) }}">
+            {% if progress_id %}<input type="hidden" name="progress_id" value="{{ progress_id }}">{% endif %}
+            
+            {% for district in scraped_districts %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>{{ district.name }} - Interviewer: {{ district.interviewer }}</h4>
+                </div>
+                <div class="card-body">
+                    <h5>Companionships ({{ district.companionships|length }}):</h5>
+                    <div class="row">
+                        {% for companionship in district.companionships %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card">
+                                <div class="card-header">
+                                    Companionship {{ companionship.companionship_id }}
+                                </div>
+                                <div class="card-body">
+                                    <h6>Members:</h6>
+                                    <ul class="list-group list-group-flush">
+                                        {% for member in companionship.members %}
+                                        <li class="list-group-item">
+                                            <strong>{{ member.name }}</strong>
+                                            {% if member.phone %}<br><small>Phone: {{ member.phone }}</small>{% endif %}
+                                            {% if member.email %}<br><small>Email: {{ member.email }}</small>{% endif %}
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <div class="alert alert-warning">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="clear_existing" name="clear_existing">
+                    <label class="form-check-label" for="clear_existing">
+                        <strong>Clear all existing data before import</strong> - This will delete all current districts, companionships, members, and bookings for a completely fresh import.
+                    </label>
+                </div>
+            </div>
+            
+            <button type="submit" name="confirm_import" class="btn btn-success">Import All Data</button>
+            <a href="{{ url_for('scrape_data') if confirm_endpoint == 'import_confirm' else url_for('import_csv') }}" class="btn btn-secondary">Start Over</a>
+        </form>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

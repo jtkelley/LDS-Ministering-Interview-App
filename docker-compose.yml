@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  ministering-app:
+    build: .
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./interviews.db:/app/interviews.db
+      - chromedriver-cache:/tmp/.wdm
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_NUMBER=${TWILIO_NUMBER}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8181/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  chromedriver-cache:

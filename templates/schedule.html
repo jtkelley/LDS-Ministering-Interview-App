@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Schedule Interview</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        .content { padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>Schedule Interview for {{ member.name }}</h1>
+    <p>District: {{ member.team.district.name }}</p>
+    <h2>Available Slots</h2>
+    <ul>
+    {% for slot in slots %}
+        <li>{{ slot.date }} {{ slot.start_time }} ({{ slot.duration }}min) - Booked: {{ slot.bookings|length }}/10
+            {% if slot.bookings|length < 10 %}
+            <form method="POST" action="{{ url_for('book_slot', slot_id=slot.id, token=member.token) }}">
+                <button type="submit">Book This Slot</button>
+            </form>
+            {% else %}
+            <em>Full</em>
+            {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
