@@ -181,6 +181,30 @@ def apply_sms_config():
 
     return False
 
+def format_sms_message(link, member=None):
+    """
+    Format SMS message based on system configuration
+    Returns formatted message string
+    """
+    config = SystemConfig.query.first()
+    if not config:
+        # Fallback if no config
+        return f"Ministering Interview\n\nPlease schedule your interview: {link}"
+
+    # Base message
+    message = "Ministering Interview\n\n"
+    message += f"Please schedule your interview: {link}\n\n"
+
+    # Add do-not-reply warning if using 1-way mode
+    if config.sms_mode == 'one_way':
+        message += "Do not reply to this text.\n\n"
+
+        # Add personal contact if enabled
+        if config.sms_contact_enabled and config.sms_contact_name and config.sms_contact_phone:
+            message += f"Questions? Call/text {config.sms_contact_name} at {config.sms_contact_phone}"
+
+    return message
+
 def send_sms(to_number, message):
     """Send SMS using configured provider"""
     global sms_config
@@ -328,7 +352,7 @@ Thank you!
                 # Send SMS if enabled
                 if member.can_receive_sms():
                     try:
-                        sms_message = f"Reminder: Schedule your Q{current_quarter} ministering interview. Click: {link}"
+                        sms_message = format_sms_message(link, member)
                         if send_sms(member.phone, sms_message):
                             sms_sent += 1
                     except Exception as e:
@@ -424,6 +448,19 @@ class SystemConfig(db.Model):
     reminder_hour = db.Column(db.Integer, nullable=False, default=9)  # 0-23
     reminder_minute = db.Column(db.Integer, nullable=False, default=0)  # 0-59
 
+    # SMS Mode and Enhancement Settings (Phase 1)
+    sms_mode = db.Column(db.String(20), default='one_way')  # 'one_way' or 'two_way'
+    sms_contact_enabled = db.Column(db.Boolean, default=True)
+    sms_contact_name = db.Column(db.String(100))
+    sms_contact_phone = db.Column(db.String(20))
+
+    # Phase 2 Settings (for future use - hidden in UI for now)
+    webhook_enabled = db.Column(db.Boolean, default=False)
+    webhook_secret = db.Column(db.String(255))  # For validating incoming webhooks
+    auto_reply_enabled = db.Column(db.Boolean, default=False)
+    auto_stop_handling = db.Column(db.Boolean, default=True)
+    stop_keywords = db.Column(db.Text, default='STOP,UNSUBSCRIBE,CANCEL,END,QUIT')
+
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
     
@@ -472,7 +509,50 @@ class SystemConfig(db.Model):
             'reminder_day_of_week': self.reminder_day_of_week,
             'reminder_hour': self.reminder_hour,
             'reminder_minute': self.reminder_minute,
+            'sms_mode': self.sms_mode,
+            'sms_contact_enabled': self.sms_contact_enabled,
+            'sms_contact_name': self.sms_contact_name,
+            'sms_contact_phone': self.sms_contact_phone,
+            'webhook_enabled': self.webhook_enabled,
+            'auto_reply_enabled': self.auto_reply_enabled,
+            'auto_stop_handling': self.auto_stop_handling,
+            'stop_keywords': self.stop_keywords,
         }
+
+class IncomingSMS(db.Model):
+    """Incoming SMS messages (for 2-way messaging in Phase 2)"""
+    __tablename__ = 'incoming_sms'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Message details
+    from_number = db.Column(db.String(20), nullable=False, index=True)
+    to_number = db.Column(db.String(20))  # Our SMS number (for 2-way)
+    message_body = db.Column(db.Text, nullable=False)
+    provider = db.Column(db.String(20))  # 'twilio', 'aws', 'signalwire'
+
+    # Timestamps
+    received_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+
+    # Member association (auto-match by phone)
+    member_id = db.Column(db.Integer, db.ForeignKey('member.id'), nullable=True, index=True)
+    member = db.relationship('Member', backref='received_sms')
+
+    # Handling status
+    status = db.Column(db.String(20), default='new')  # 'new', 'read', 'responded', 'archived', 'auto_handled'
+    is_stop_request = db.Column(db.Boolean, default=False)
+
+    # Response tracking
+    responded_at = db.Column(db.DateTime, nullable=True)
+    response_text = db.Column(db.Text, nullable=True)
+    handled_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    handled_by = db.relationship('User', foreign_keys=[handled_by_user_id])
+
+    # Raw data for debugging
+    raw_webhook_data = db.Column(db.JSON, nullable=True)
+
+    # Notes
+    admin_notes = db.Column(db.Text, nullable=True)
 
 # Flask-User setup (after User model is defined)
 user_manager = None  # Will be initialized in main
@@ -1482,7 +1562,8 @@ def send_notifications(district_id):
             # Send SMS (only if enabled and configured)
             if sms_configured and member.can_receive_sms():
                 try:
-                    send_sms(member.phone, f'Interview link: {link}')
+                    sms_message = format_sms_message(link, member)
+                    send_sms(member.phone, sms_message)
                 except Exception as e:
                     print(f"Failed to send SMS to {member.phone}: {e}")
 
@@ -2005,7 +2086,8 @@ def send_all_notifications():
                 # Send SMS (only if enabled and configured)
                 if sms_configured and member.can_receive_sms():
                     try:
-                        send_sms(member.phone, f'Interview link: {link}')
+                        sms_message = format_sms_message(link, member)
+                        send_sms(member.phone, sms_message)
                     except Exception as e:
                         print(f"Failed to send SMS to {member.phone}: {e}")
 
@@ -2057,6 +2139,13 @@ def save_system_settings():
                 config.mail_password = mail_password
             
         elif config_type == 'sms':
+            # SMS Mode and Contact Settings
+            config.sms_mode = request.form.get('sms_mode', 'one_way')
+            config.sms_contact_enabled = request.form.get('sms_contact_enabled') == 'on'
+            config.sms_contact_name = request.form.get('sms_contact_name', '')
+            config.sms_contact_phone = request.form.get('sms_contact_phone', '')
+
+            # SMS Provider
             config.sms_provider = request.form.get('sms_provider', 'twilio')
 
             # Twilio settings
@@ -2101,12 +2190,13 @@ def save_system_settings():
         db.session.commit()
         
         flash(f'{config_type.capitalize()} settings saved successfully!', 'success')
-        
+
     except Exception as e:
         db.session.rollback()
         flash(f'Error saving settings: {str(e)}', 'error')
-    
-    return redirect(url_for('system_settings'))
+
+    # Redirect back to the same tab
+    return redirect(url_for('system_settings') + f'#{config_type}')
 
 @app.route('/admin/settings/test-email')
 @admin_required
@@ -2137,31 +2227,100 @@ def send_test_email():
         flash(f'Test email sent successfully to {current_user.email}!', 'success')
     except Exception as e:
         flash(f'Failed to send test email: {str(e)}', 'error')
-    
-    return redirect(url_for('system_settings'))
 
-@app.route('/admin/settings/test-sms')
+    return redirect(url_for('system_settings') + '#email')
+
+@app.route('/admin/settings/test-sms', methods=['POST'])
 @admin_required
 def send_test_sms():
     """Send a test SMS"""
     config = SystemConfig.query.first()
     if not config:
         flash('System settings not configured yet.', 'error')
-        return redirect(url_for('system_settings'))
+        return redirect(url_for('system_settings') + '#sms')
+
+    # Get phone number from form
+    test_phone = request.form.get('test_phone_number', '').strip()
+    if not test_phone:
+        flash('Please enter a phone number to send the test SMS.', 'error')
+        return redirect(url_for('system_settings') + '#sms')
 
     try:
         # Reload SMS config
         if not apply_sms_config():
-            flash('SMS not configured. Please configure SMS settings first.', 'error')
-            return redirect(url_for('system_settings'))
+            flash('❌ SMS not configured. Please configure your SMS provider settings first.', 'error')
+            return redirect(url_for('system_settings') + '#sms')
 
-        # Get current user's phone or use a test number
-        # For now, just show a success message (actual SMS requires admin to provide their phone)
-        flash('SMS configuration is valid. To send a test SMS, add your phone number and implement test SMS functionality.', 'info')
+        # Create a test link
+        test_link = request.url_root + 'schedule/test-token-123'
+
+        # Format the message using the same function as real notifications
+        test_message = format_sms_message(test_link)
+
+        # Send the test SMS - call provider directly to get detailed errors
+        global sms_config
+
+        if not sms_config.get('provider') or not sms_config.get('client'):
+            flash('❌ SMS provider not configured properly. Check your credentials.', 'error')
+            return redirect(url_for('system_settings') + '#sms')
+
+        # Send based on provider (with detailed error handling)
+        if sms_config['provider'] == 'twilio':
+            result = sms_config['client'].messages.create(
+                body=test_message,
+                from_=sms_config['from_number'],
+                to=test_phone
+            )
+            flash(f'✅ Test SMS sent successfully to {test_phone}! Message SID: {result.sid}', 'success')
+
+        elif sms_config['provider'] == 'aws_sns':
+            params = {
+                'PhoneNumber': test_phone,
+                'Message': test_message
+            }
+            if sms_config.get('sender_id'):
+                params['MessageAttributes'] = {
+                    'AWS.SNS.SMS.SenderID': {
+                        'DataType': 'String',
+                        'StringValue': sms_config['sender_id']
+                    }
+                }
+            result = sms_config['client'].publish(**params)
+            flash(f'✅ Test SMS sent successfully to {test_phone}! Message ID: {result["MessageId"]}', 'success')
+
+        elif sms_config['provider'] == 'signalwire':
+            result = sms_config['client'].messages.create(
+                body=test_message,
+                from_=sms_config['from_number'],
+                to=to_number
+            )
+            flash(f'✅ Test SMS sent successfully to {test_phone}! Message SID: {result.sid}', 'success')
+
     except Exception as e:
-        flash(f'Failed to test SMS configuration: {str(e)}', 'error')
+        # Show detailed error information
+        error_type = type(e).__name__
+        error_msg = str(e)
 
-    return redirect(url_for('system_settings'))
+        # Try to extract more detailed error info from provider-specific exceptions
+        detailed_msg = f'❌ Failed to send test SMS\n\n'
+        detailed_msg += f'<strong>Error Type:</strong> {error_type}\n'
+        detailed_msg += f'<strong>Error Message:</strong> {error_msg}\n\n'
+
+        # Add troubleshooting hints based on error
+        if 'credentials' in error_msg.lower() or 'auth' in error_msg.lower():
+            detailed_msg += '<strong>💡 Hint:</strong> Check your API credentials (Account SID, Auth Token, Access Keys)'
+        elif 'phone' in error_msg.lower() or 'number' in error_msg.lower():
+            detailed_msg += '<strong>💡 Hint:</strong> Verify phone number format (use international format: +1234567890)'
+        elif 'region' in error_msg.lower():
+            detailed_msg += '<strong>💡 Hint:</strong> Check your AWS region setting'
+        elif 'from' in error_msg.lower():
+            detailed_msg += '<strong>💡 Hint:</strong> Verify your sender phone number is configured correctly'
+        else:
+            detailed_msg += f'<strong>💡 Hint:</strong> Check your SMS provider console for more details'
+
+        flash(detailed_msg, 'error')
+
+    return redirect(url_for('system_settings') + '#sms')
 
 if __name__ == '__main__':
     with app.app_context():

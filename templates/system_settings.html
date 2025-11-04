@@ -98,6 +98,360 @@
                         <form method="POST" action="{{ url_for('save_system_settings') }}" id="sms-form">
                             <input type="hidden" name="config_type" value="sms">
 
+                            <!-- SMS Mode Selection -->
+                            <div class="mb-4 p-3 bg-light rounded">
+                                <h6 class="mb-3">📱 SMS Mode</h6>
+
+                                <div class="form-check mb-3">
+                                    <input type="radio" class="form-check-input" id="sms_mode_one_way" name="sms_mode" value="one_way"
+                                           {% if not config.sms_mode or config.sms_mode == 'one_way' %}checked{% endif %}
+                                           onchange="toggleSMSMode()">
+                                    <label class="form-check-label" for="sms_mode_one_way">
+                                        <strong>1-Way Messaging (Recommended)</strong>
+                                        <span class="badge bg-success ms-2">Simple Setup • Lowest Cost</span>
+                                    </label>
+                                    <p class="text-muted small ms-4 mb-0">
+                                        Send notifications only. Replies go to your personal phone number.<br>
+                                        Estimated cost: ~$2/month for 400 messages
+                                    </p>
+                                </div>
+
+                                <div class="form-check">
+                                    <input type="radio" class="form-check-input" id="sms_mode_two_way" name="sms_mode" value="two_way"
+                                           {% if config.sms_mode == 'two_way' %}checked{% endif %}
+                                           onchange="toggleSMSMode()">
+                                    <label class="form-check-label" for="sms_mode_two_way">
+                                        <strong>2-Way Messaging (Advanced)</strong>
+                                        <span class="badge bg-warning ms-2">Requires Webhook Setup</span>
+                                    </label>
+                                    <p class="text-muted small ms-4 mb-0">
+                                        Automated reply handling and message tracking in the app.<br>
+                                        Estimated cost: $4-6/month (includes dedicated number)
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- SMS Provider Comparison and Setup Guide -->
+                            <div class="mb-4">
+                                <div class="accordion" id="smsGuideAccordion">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="headingGuide">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                                    data-bs-target="#collapseGuide" aria-expanded="false" aria-controls="collapseGuide">
+                                                <strong>📖 SMS Provider Setup Guide & Cost Comparison</strong>
+                                            </button>
+                                        </h2>
+                                        <div id="collapseGuide" class="accordion-collapse collapse" aria-labelledby="headingGuide">
+                                            <div class="accordion-body">
+                                                <!-- Provider Comparison Table -->
+                                                <h6 class="mb-3">💰 Cost Comparison (for ~400 messages/month)</h6>
+                                                <div class="table-responsive mb-4">
+                                                    <table class="table table-sm table-bordered">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th>Feature</th>
+                                                                <th>AWS SNS</th>
+                                                                <th>SignalWire</th>
+                                                                <th>Twilio</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr>
+                                                                <td><strong>Setup Complexity</strong></td>
+                                                                <td><span class="badge bg-success">Low</span></td>
+                                                                <td><span class="badge bg-warning">Medium</span></td>
+                                                                <td><span class="badge bg-warning">Medium</span></td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td><strong>1-Way Cost</strong></td>
+                                                                <td>~$1.94/month</td>
+                                                                <td>~$2.10/month</td>
+                                                                <td>~$4.47/month</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td><strong>2-Way Cost</strong></td>
+                                                                <td>~$3.94+/month</td>
+                                                                <td>~$2.60+/month</td>
+                                                                <td>~$5.62+/month</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td><strong>A2P Registration</strong></td>
+                                                                <td>Required</td>
+                                                                <td>Required (Sole Prop)</td>
+                                                                <td>Required (Sole Prop)</td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td><strong>Best For</strong></td>
+                                                                <td>Lowest cost, simple setup</td>
+                                                                <td>Best features/cost ratio</td>
+                                                                <td>Max reliability</td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- Recommendation Box -->
+                                                <div class="alert alert-success mb-4">
+                                                    <h6 class="alert-heading">✅ Our Recommendation</h6>
+                                                    <p class="mb-2">
+                                                        For church apps with low volume (~400 msgs/month) and volunteer management:
+                                                    </p>
+                                                    <ul class="mb-2">
+                                                        <li><strong>AWS SNS</strong> - Best overall value for 1-way messaging</li>
+                                                        <li><strong>1-Way Mode</strong> - Simplest setup, add your personal number for replies</li>
+                                                        <li>Estimated cost: <strong>$1.94/month</strong> (some covered by AWS free tier)</li>
+                                                    </ul>
+                                                    <p class="mb-0 small text-muted">
+                                                        This gives you professional automated notifications while maintaining the "neighbor helping neighbor" feel.
+                                                    </p>
+                                                </div>
+
+                                                <!-- Setup Instructions Accordion -->
+                                                <h6 class="mb-3">🔧 Provider Setup Instructions</h6>
+                                                <div class="accordion" id="providerSetupAccordion">
+
+                                                    <!-- AWS SNS Setup -->
+                                                    <div class="accordion-item">
+                                                        <h2 class="accordion-header" id="headingAWS">
+                                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                                                    data-bs-target="#collapseAWS" aria-expanded="false" aria-controls="collapseAWS">
+                                                                <strong>AWS SNS Setup</strong> <span class="badge bg-success ms-2">Recommended</span>
+                                                            </button>
+                                                        </h2>
+                                                        <div id="collapseAWS" class="accordion-collapse collapse" aria-labelledby="headingAWS">
+                                                            <div class="accordion-body small">
+                                                                <ol>
+                                                                    <li class="mb-2">
+                                                                        <strong>Create AWS Account:</strong> Visit <a href="https://aws.amazon.com" target="_blank">aws.amazon.com</a> and sign up
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Create IAM User:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>Go to IAM → Users → Create User</li>
+                                                                            <li>Enable "Programmatic access"</li>
+                                                                            <li>Attach policy: <code>AmazonSNSFullAccess</code></li>
+                                                                            <li>Save the Access Key ID and Secret Access Key</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Choose Region:</strong> Select your AWS region (e.g., <code>us-east-1</code>, <code>us-west-2</code>)
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>A2P 10DLC Registration:</strong> (Required for US numbers)
+                                                                        <ul class="mt-1">
+                                                                            <li>Go to AWS SNS Console → Mobile → Text messaging (SMS) → Register company</li>
+                                                                            <li>Register as "Sole Proprietor" using your personal information</li>
+                                                                            <li>Create a "Low Volume" campaign (~$2 one-time + $1/month)</li>
+                                                                            <li>Approval typically takes 1-2 business days</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Configure Above:</strong> Enter your Access Key ID, Secret Access Key, and Region in the AWS SNS settings section
+                                                                    </li>
+                                                                    <li>
+                                                                        <strong>Test:</strong> Use the "Send Test SMS" button to verify setup
+                                                                    </li>
+                                                                </ol>
+                                                                <div class="alert alert-info mt-3 mb-0">
+                                                                    <strong>💡 Tip:</strong> AWS free tier includes 100 SMS messages per month for the first 12 months,
+                                                                    reducing your costs further during the first year.
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Twilio Setup -->
+                                                    <div class="accordion-item">
+                                                        <h2 class="accordion-header" id="headingTwilio">
+                                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                                                    data-bs-target="#collapseTwilio" aria-expanded="false" aria-controls="collapseTwilio">
+                                                                <strong>Twilio Setup</strong>
+                                                            </button>
+                                                        </h2>
+                                                        <div id="collapseTwilio" class="accordion-collapse collapse" aria-labelledby="headingTwilio">
+                                                            <div class="accordion-body small">
+                                                                <ol>
+                                                                    <li class="mb-2">
+                                                                        <strong>Create Account:</strong> Visit <a href="https://www.twilio.com/try-twilio" target="_blank">twilio.com</a> and sign up
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Get Credentials:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>From your Twilio Console, copy your Account SID</li>
+                                                                            <li>Copy your Auth Token (click "Show" to reveal it)</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Get Phone Number:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>Go to Phone Numbers → Buy a Number</li>
+                                                                            <li>Choose a number with SMS capability (~$1.15/month)</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>A2P 10DLC Registration:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>Go to Messaging → Regulatory Compliance → Register a Business</li>
+                                                                            <li>Register as "Sole Proprietor" with your personal details</li>
+                                                                            <li>Create a "Low Volume Mixed" campaign (~$4 one-time + $2/month)</li>
+                                                                            <li>Approval typically takes 1 week</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Configure Above:</strong> Enter your Account SID, Auth Token, and Phone Number
+                                                                    </li>
+                                                                    <li>
+                                                                        <strong>Test:</strong> Send a test message to verify
+                                                                    </li>
+                                                                </ol>
+                                                                <div class="alert alert-info mt-3 mb-0">
+                                                                    <strong>💡 Tip:</strong> Twilio offers the most extensive documentation and support resources,
+                                                                    making it great if you need extra help during setup.
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- SignalWire Setup -->
+                                                    <div class="accordion-item">
+                                                        <h2 class="accordion-header" id="headingSignalWire">
+                                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                                                    data-bs-target="#collapseSignalWire" aria-expanded="false" aria-controls="collapseSignalWire">
+                                                                <strong>SignalWire Setup</strong>
+                                                            </button>
+                                                        </h2>
+                                                        <div id="collapseSignalWire" class="accordion-collapse collapse" aria-labelledby="headingSignalWire">
+                                                            <div class="accordion-body small">
+                                                                <ol>
+                                                                    <li class="mb-2">
+                                                                        <strong>Create Account:</strong> Visit <a href="https://signalwire.com" target="_blank">signalwire.com</a> and sign up
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Get Credentials:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>From your dashboard, copy your Project ID</li>
+                                                                            <li>Create and copy an API Token</li>
+                                                                            <li>Note your Space URL (e.g., yourspace.signalwire.com)</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Get Phone Number:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>Go to Phone Numbers → Buy a Number</li>
+                                                                            <li>Choose a number with SMS capability (~$1/month)</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>A2P 10DLC Registration:</strong>
+                                                                        <ul class="mt-1">
+                                                                            <li>Go to Messaging → Campaign Registry</li>
+                                                                            <li>Register as "Sole Proprietor"</li>
+                                                                            <li>Create a "Low Volume Mixed" campaign (~$4 one-time + $1.50/month)</li>
+                                                                            <li>Lower costs than Twilio for ongoing campaigns</li>
+                                                                        </ul>
+                                                                    </li>
+                                                                    <li class="mb-2">
+                                                                        <strong>Configure Above:</strong> Enter Project ID, Auth Token, Space URL, and Phone Number
+                                                                    </li>
+                                                                    <li>
+                                                                        <strong>Test:</strong> Verify your setup works
+                                                                    </li>
+                                                                </ol>
+                                                                <div class="alert alert-info mt-3 mb-0">
+                                                                    <strong>💡 Tip:</strong> SignalWire offers the best cost-per-message rates for 2-way messaging
+                                                                    and advanced features if you plan to scale up later.
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Important Notes -->
+                                                <div class="alert alert-warning mt-4 mb-0">
+                                                    <h6 class="alert-heading">⚠️ Important: A2P 10DLC Registration</h6>
+                                                    <p class="mb-2">
+                                                        All SMS providers require A2P (Application-to-Person) 10DLC registration for US phone numbers.
+                                                        This is a US carrier requirement, not a provider choice.
+                                                    </p>
+                                                    <ul class="mb-0 small">
+                                                        <li><strong>Who:</strong> You can register as a "Sole Proprietor" using personal information (no EIN required)</li>
+                                                        <li><strong>Cost:</strong> One-time registration ($2-4) + monthly campaign fee ($1-2/month)</li>
+                                                        <li><strong>Time:</strong> Approval takes 1-7 business days depending on provider</li>
+                                                        <li><strong>Campaign Type:</strong> Choose "Low Volume Mixed" or "Low Volume Standard" for church notifications</li>
+                                                        <li><strong>Why Required:</strong> Prevents spam and ensures message delivery to US mobile carriers</li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Personal Contact Information (1-Way Mode) -->
+                            <div id="one_way_settings" class="mb-4 p-3 bg-light rounded" style="display: block;">
+                                <h6 class="mb-3">📞 Reply Contact Information</h6>
+                                <p class="text-muted small">
+                                    When using 1-way messaging, include your contact information for members to reach you directly.
+                                </p>
+
+                                <div class="form-check mb-3">
+                                    <input type="checkbox" class="form-check-input" id="sms_contact_enabled" name="sms_contact_enabled"
+                                           {% if config.sms_contact_enabled is none or config.sms_contact_enabled %}checked{% endif %}
+                                           onchange="toggleContactFields()">
+                                    <label class="form-check-label" for="sms_contact_enabled">
+                                        Include personal contact information in messages
+                                    </label>
+                                </div>
+
+                                <div id="contact_fields" style="display: {% if config.sms_contact_enabled is none or config.sms_contact_enabled %}block{% else %}none{% endif %};">
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label for="sms_contact_name" class="form-label">Contact Name</label>
+                                            <input type="text" class="form-control" id="sms_contact_name"
+                                                   name="sms_contact_name" value="{{ config.sms_contact_name or '' }}"
+                                                   placeholder="John Smith" onkeyup="updatePreview()">
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label for="sms_contact_phone" class="form-label">Contact Phone Number</label>
+                                            <input type="tel" class="form-control" id="sms_contact_phone"
+                                                   name="sms_contact_phone" value="{{ config.sms_contact_phone or '' }}"
+                                                   placeholder="(555) 123-4567" onkeyup="updatePreview()">
+                                        </div>
+                                    </div>
+
+                                    <!-- Live Preview -->
+                                    <div class="card bg-white">
+                                        <div class="card-header bg-primary text-white">
+                                            <strong>📱 Message Preview</strong>
+                                        </div>
+                                        <div class="card-body">
+                                            <pre id="message_preview" style="white-space: pre-wrap; font-family: system-ui; margin: 0;">Loading preview...</pre>
+                                        </div>
+                                        <div class="card-footer text-muted small">
+                                            This is how your SMS messages will appear to members
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 2-Way Settings (Hidden in Phase 1) -->
+                            <div id="two_way_settings" class="mb-4 p-3 bg-light rounded" style="display: none;">
+                                <div class="alert alert-info mb-0">
+                                    <strong>🚧 2-Way Messaging Setup</strong>
+                                    <p class="mb-2">
+                                        This feature is coming soon and will include:
+                                    </p>
+                                    <ul class="mb-0">
+                                        <li>Webhook configuration for receiving replies</li>
+                                        <li>Automated STOP handling</li>
+                                        <li>Message inbox for tracking conversations</li>
+                                        <li>Quick reply templates</li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <hr class="my-4">
+
                             <div class="mb-4">
                                 <label for="sms_provider" class="form-label">SMS Provider:</label>
                                 <select class="form-select" id="sms_provider" name="sms_provider" required onchange="toggleSMSProvider()">
@@ -201,95 +555,150 @@
 
                             <div class="mb-3 mt-4">
                                 <button type="submit" class="btn btn-primary">💾 Save SMS Settings</button>
-                                <a href="{{ url_for('send_test_sms') }}" class="btn btn-secondary">📱 Send Test SMS</a>
                             </div>
                         </form>
+
+                        <!-- Test SMS Form (separate from save form) -->
+                        <div class="card mt-3">
+                            <div class="card-body bg-light">
+                                <h6 class="card-title">📱 Send Test SMS</h6>
+                                <p class="text-muted small mb-3">
+                                    Send a test message to verify your SMS configuration and see how the formatted message will appear.
+                                </p>
+                                <form method="POST" action="{{ url_for('send_test_sms') }}" class="row g-3">
+                                    <div class="col-md-8">
+                                        <label for="test_phone_number" class="form-label">Phone Number</label>
+                                        <input type="tel" class="form-control" id="test_phone_number" name="test_phone_number"
+                                               placeholder="+1 (555) 123-4567" required>
+                                        <small class="form-text text-muted">Enter your phone number to receive the test SMS</small>
+                                    </div>
+                                    <div class="col-md-4 d-flex align-items-end">
+                                        <button type="submit" class="btn btn-secondary w-100">📱 Send Test SMS</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Scheduler Settings Tab -->
             <div class="tab-pane fade" id="scheduler" role="tabpanel">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title mb-4">Automated Reminder Scheduler</h5>
-                        <form method="POST" action="{{ url_for('save_system_settings') }}">
-                            <input type="hidden" name="config_type" value="scheduler">
+                <form method="POST" action="{{ url_for('save_system_settings') }}">
+                    <input type="hidden" name="config_type" value="scheduler">
 
-                            <div class="mb-4">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="reminder_enabled" name="reminder_enabled"
-                                           {% if config.reminder_enabled %}checked{% endif %}>
-                                    <label class="form-check-label" for="reminder_enabled">
-                                        <strong>Enable Automated Reminders</strong>
-                                    </label>
-                                </div>
-                                <small class="form-text text-muted">Send automatic reminders to members who haven't booked interviews</small>
-                            </div>
-
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="reminder_day_of_week" class="form-label">Day of Week:</label>
-                                    <select class="form-select" id="reminder_day_of_week" name="reminder_day_of_week">
-                                        <option value="0" {% if config.reminder_day_of_week == 0 %}selected{% endif %}>Monday</option>
-                                        <option value="1" {% if config.reminder_day_of_week == 1 %}selected{% endif %}>Tuesday</option>
-                                        <option value="2" {% if config.reminder_day_of_week == 2 %}selected{% endif %}>Wednesday</option>
-                                        <option value="3" {% if config.reminder_day_of_week == 3 %}selected{% endif %}>Thursday</option>
-                                        <option value="4" {% if config.reminder_day_of_week == 4 %}selected{% endif %}>Friday</option>
-                                        <option value="5" {% if config.reminder_day_of_week == 5 %}selected{% endif %}>Saturday</option>
-                                        <option value="6" {% if config.reminder_day_of_week == 6 %}selected{% endif %}>Sunday</option>
-                                    </select>
-                                    <small class="form-text text-muted">Which day to send reminders</small>
-                                </div>
-
-                                <div class="col-md-3 mb-3">
-                                    <label for="reminder_hour" class="form-label">Hour:</label>
-                                    <select class="form-select" id="reminder_hour" name="reminder_hour">
-                                        {% for h in range(24) %}
-                                        <option value="{{ h }}" {% if config.reminder_hour == h %}selected{% endif %}>
-                                            {% if h == 0 %}12 AM{% elif h < 12 %}{{ h }} AM{% elif h == 12 %}12 PM{% else %}{{ h - 12 }} PM{% endif %}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                    <small class="form-text text-muted">Hour (24-hour)</small>
-                                </div>
-
-                                <div class="col-md-3 mb-3">
-                                    <label for="reminder_minute" class="form-label">Minute:</label>
-                                    <select class="form-select" id="reminder_minute" name="reminder_minute">
-                                        {% for m in [0, 15, 30, 45] %}
-                                        <option value="{{ m }}" {% if config.reminder_minute == m %}selected{% endif %}>:{{ '%02d'|format(m) }}</option>
-                                        {% endfor %}
-                                    </select>
-                                    <small class="form-text text-muted">Minute</small>
-                                </div>
-                            </div>
-
-                            <div class="alert alert-info mb-3" id="schedule-preview">
-                                <strong>Current Schedule:</strong>
-                                <span id="preview-text"></span>
-                            </div>
-
-                            <div class="mb-3">
-                                <button type="submit" class="btn btn-primary">💾 Save Scheduler Settings</button>
-                                <a href="{{ url_for('trigger_reminders_manually') }}" class="btn btn-secondary">▶️ Run Reminder Job Now (Test)</a>
-                            </div>
-                        </form>
+                    <div class="form-check form-switch mb-4">
+                        <input type="checkbox" class="form-check-input" id="reminder_enabled"
+                               name="reminder_enabled" {% if config.reminder_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="reminder_enabled">
+                            <strong>Enable Automated Reminders</strong>
+                        </label>
+                        <p class="text-muted small ms-4 mb-0">
+                            Automatically send booking reminders to members who haven't scheduled an interview
+                        </p>
                     </div>
-                </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="reminder_day_of_week" class="form-label">Day of Week</label>
+                            <select class="form-select" id="reminder_day_of_week" name="reminder_day_of_week" onchange="updateSchedulePreview()">
+                                <option value="0" {% if config.reminder_day_of_week == 0 %}selected{% endif %}>Monday</option>
+                                <option value="1" {% if config.reminder_day_of_week == 1 %}selected{% endif %}>Tuesday</option>
+                                <option value="2" {% if config.reminder_day_of_week == 2 %}selected{% endif %}>Wednesday</option>
+                                <option value="3" {% if config.reminder_day_of_week == 3 %}selected{% endif %}>Thursday</option>
+                                <option value="4" {% if config.reminder_day_of_week == 4 %}selected{% endif %}>Friday</option>
+                                <option value="5" {% if config.reminder_day_of_week == 5 %}selected{% endif %}>Saturday</option>
+                                <option value="6" {% if config.reminder_day_of_week == 6 %}selected{% endif %}>Sunday</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="reminder_hour" class="form-label">Hour</label>
+                            <select class="form-select" id="reminder_hour" name="reminder_hour" onchange="updateSchedulePreview()">
+                                {% for h in range(24) %}
+                                <option value="{{ h }}" {% if config.reminder_hour == h %}selected{% endif %}>
+                                    {{ h if h > 0 else 12 }}:00 {{ 'AM' if h < 12 else 'PM' }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="reminder_minute" class="form-label">Minute</label>
+                            <select class="form-select" id="reminder_minute" name="reminder_minute" onchange="updateSchedulePreview()">
+                                <option value="0" {% if config.reminder_minute == 0 %}selected{% endif %}>:00</option>
+                                <option value="15" {% if config.reminder_minute == 15 %}selected{% endif %}>:15</option>
+                                <option value="30" {% if config.reminder_minute == 30 %}selected{% endif %}>:30</option>
+                                <option value="45" {% if config.reminder_minute == 45 %}selected{% endif %}>:45</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info" id="schedule-preview">
+                        <strong>📅 Schedule Preview:</strong>
+                        <span id="preview-text"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">💾 Save Scheduler Settings</button>
+                </form>
             </div>
         </div>
 
-        <div class="mt-4">
-            <h5>Security Note</h5>
-            <p class="text-muted">
-                <i class="bi bi-shield-check"></i>
-                All sensitive information (passwords, auth tokens) is encrypted in the database using AES encryption.
+        <!-- Security Notice -->
+        <div class="alert alert-warning mt-4">
+            <strong>🔒 Security Note:</strong>
+            <p class="mb-0">
+                All sensitive credentials (passwords, tokens, API keys) are encrypted before being stored in the database.
                 Password fields show as blanks for security - they only need to be filled when changing them.
             </p>
         </div>
 
 <script>
+// SMS Mode Toggle
+function toggleSMSMode() {
+    const oneWay = document.getElementById('sms_mode_one_way').checked;
+    const oneWaySettings = document.getElementById('one_way_settings');
+    const twoWaySettings = document.getElementById('two_way_settings');
+
+    if (oneWaySettings) oneWaySettings.style.display = oneWay ? 'block' : 'none';
+    if (twoWaySettings) twoWaySettings.style.display = oneWay ? 'none' : 'block';
+}
+
+// Contact Fields Toggle
+function toggleContactFields() {
+    const enabled = document.getElementById('sms_contact_enabled');
+    const contactFields = document.getElementById('contact_fields');
+
+    if (enabled && contactFields) {
+        contactFields.style.display = enabled.checked ? 'block' : 'none';
+        updatePreview();
+    }
+}
+
+// Update Message Preview
+function updatePreview() {
+    const contactEnabled = document.getElementById('sms_contact_enabled');
+    const contactName = document.getElementById('sms_contact_name');
+    const contactPhone = document.getElementById('sms_contact_phone');
+    const messagePreview = document.getElementById('message_preview');
+
+    if (!messagePreview) return;
+
+    let preview = "Ministering Interview\n\n";
+    preview += "Please schedule your interview: https://yourapp.com/schedule/abc123\n\n";
+    preview += "Do not reply to this text.\n\n";
+
+    if (contactEnabled && contactEnabled.checked) {
+        const name = (contactName && contactName.value) ? contactName.value : '[Your Name]';
+        const phone = (contactPhone && contactPhone.value) ? contactPhone.value : '(555) 123-4567';
+        preview += `Questions? Call/text ${name} at ${phone}`;
+    } else {
+        preview += "[No contact information included]";
+    }
+
+    messagePreview.textContent = preview;
+}
+
 function toggleSMSProvider() {
     const provider = document.getElementById('sms_provider').value;
     document.querySelectorAll('.provider-settings').forEach(el => el.style.display = 'none');
@@ -303,15 +712,43 @@ function toggleSMSProvider() {
     }
 }
 
+// Activate tab based on URL hash
+function activateTabFromHash() {
+    const hash = window.location.hash.substring(1); // Remove the # symbol
+    if (hash) {
+        const tabMap = {
+            'email': 'email-tab',
+            'sms': 'sms-tab',
+            'scheduler': 'scheduler-tab'
+        };
+
+        const tabId = tabMap[hash];
+        if (tabId) {
+            const tabElement = document.getElementById(tabId);
+            if (tabElement) {
+                const tab = new bootstrap.Tab(tabElement);
+                tab.show();
+            }
+        }
+    }
+}
+
 // Call on page load to show the correct provider settings
 document.addEventListener('DOMContentLoaded', function() {
+    toggleSMSMode();
+    toggleContactFields();
+    updatePreview();
     toggleSMSProvider();
     updateSchedulePreview();
+    activateTabFromHash();
 });
 
 // Update schedule preview when dropdown values change
 function updateSchedulePreview() {
-    const enabled = document.getElementById('reminder_enabled').checked;
+    const enabled = document.getElementById('reminder_enabled');
+    if (!enabled) return;
+
+    const isEnabled = enabled.checked;
     const dayOfWeek = parseInt(document.getElementById('reminder_day_of_week').value);
     const hour = parseInt(document.getElementById('reminder_hour').value);
     const minute = parseInt(document.getElementById('reminder_minute').value);
@@ -322,20 +759,13 @@ function updateSchedulePreview() {
     const displayMinute = minute.toString().padStart(2, '0');
 
     const previewText = document.getElementById('preview-text');
-    if (enabled) {
-        previewText.textContent = `Reminders will be sent every ${days[dayOfWeek]} at ${displayHour}:${displayMinute} ${ampm}`;
-        previewText.style.color = '#0f5132';
-    } else {
-        previewText.textContent = 'Automated reminders are disabled';
-        previewText.style.color = '#842029';
+    if (previewText) {
+        if (isEnabled) {
+            previewText.textContent = `Reminders will be sent every ${days[dayOfWeek]} at ${displayHour}:${displayMinute} ${ampm}`;
+        } else {
+            previewText.textContent = 'Automated reminders are currently disabled';
+        }
     }
 }
-
-// Attach event listeners
-document.getElementById('reminder_enabled').addEventListener('change', updateSchedulePreview);
-document.getElementById('reminder_day_of_week').addEventListener('change', updateSchedulePreview);
-document.getElementById('reminder_hour').addEventListener('change', updateSchedulePreview);
-document.getElementById('reminder_minute').addEventListener('change', updateSchedulePreview);
 </script>
-
 {% endblock %}
