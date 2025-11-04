@@ -56,7 +56,7 @@
                         <td>
                             {% if member.team %}
                             <form method="POST" action="{{ url_for('unassign_member', member_id=member.id) }}" style="display:inline-block;" class="me-2">
-                                <button type="submit" class="btn btn-sm btn-warning" onclick="return confirm('Unassign {{ member.name }} from companionship?')">Unassign</button>
+                                <button type="submit" class="btn btn-sm btn-warning" data-confirm-message="Unassign {{ member.name }} from companionship?" data-confirm-variant="warning">Unassign</button>
                             </form>
                             {% endif %}
                             <form method="POST" action="{{ url_for('reassign_member', member_id=member.id) }}" style="display:inline-block;" class="me-2">
@@ -72,11 +72,11 @@
                                         </optgroup>
                                     {% endfor %}
                                 </select>
-                                <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Reassign {{ member.name }}? This will cancel any existing interview bookings.')">Reassign</button>
+                                <button type="submit" class="btn btn-sm btn-primary" data-confirm-message="Reassign {{ member.name }}? This will cancel any existing interview bookings." data-confirm-variant="primary">Reassign</button>
                             </form>
                             <a href="{{ url_for('edit_member', member_id=member.id) }}" class="btn btn-sm btn-outline-secondary me-2">Edit</a>
                             <form method="POST" action="{{ url_for('unassign_member', member_id=member.id) }}" style="display:inline;">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Unassign {{ member.name }} from companionship?')">Unassign</button>
+                                <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Unassign {{ member.name }} from companionship?" data-confirm-variant="danger">Unassign</button>
                             </form>
                         </td>
                     </tr>

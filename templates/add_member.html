@@ -87,7 +87,7 @@
                     {% endif %}
                     
                     <input type="hidden" id="existing_member_id" name="existing_member_id" value="">
-                    <button type="submit" class="btn btn-warning" onclick="return confirm('This will cancel any existing interview bookings for this member.')">
+                    <button type="submit" class="btn btn-warning" data-confirm-message="This will cancel any existing interview bookings for this member." data-confirm-variant="warning">
                         Reassign to This Companionship
                     </button>
                 </form>

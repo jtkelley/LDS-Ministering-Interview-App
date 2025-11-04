@@ -34,6 +34,12 @@
                 <label for="email" class="form-label">Email:</label>
                 <input type="email" class="form-control" id="email" name="email" value="{{ member.email }}">
             </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="no_sms" name="no_sms" {% if member.no_sms %}checked{% endif %}>
+                <label class="form-check-label" for="no_sms">
+                    Disable SMS notifications (check if phone number is invalid or landline)
+                </label>
+            </div>
             <button type="submit" class="btn btn-primary">Update</button>
         </form>
         <a href="{{ url_for('district_detail', id=member.team.district_id) }}" class="btn btn-secondary mt-3">Back</a>

@@ -118,7 +118,7 @@
                                                 <li class="d-flex justify-content-between align-items-center">
                                                     <span>{{ booking.member.name }} {% if booking.member.phone %}{{ booking.member.phone }}{% endif %}</span>
                                                     <form method="POST" action="{{ url_for('remove_booking', booking_id=booking.id) }}" style="display:inline;">
-                                                        <button type="submit" class="btn btn-sm btn-outline-danger btn-close" onclick="return confirm('Remove {{ booking.member.name }}?')" aria-label="Remove"></button>
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger btn-close" data-confirm-message="Remove {{ booking.member.name }}?" data-confirm-variant="danger" aria-label="Remove"></button>
                                                     </form>
                                                 </li>
                                             {% endfor %}

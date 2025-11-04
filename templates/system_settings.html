@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings{% endblock %}
+
+{% block content %}
+        <h1 class="mb-4">System Settings</h1>
+
+        <ul class="nav nav-tabs mb-4" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="email-tab" data-bs-toggle="tab" data-bs-target="#email" type="button" role="tab">📧 Email Settings</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="sms-tab" data-bs-toggle="tab" data-bs-target="#sms" type="button" role="tab">📱 SMS Settings</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="scheduler-tab" data-bs-toggle="tab" data-bs-target="#scheduler" type="button" role="tab">⏰ Scheduler Settings</button>
+            </li>
+        </ul>
+        
+        <div class="tab-content">
+            <!-- Email Settings Tab -->
+            <div class="tab-pane fade show active" id="email" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">Email Server Configuration</h5>
+                        <form method="POST" action="{{ url_for('save_system_settings') }}">
+                            <input type="hidden" name="config_type" value="email">
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_server" class="form-label">SMTP Server:</label>
+                                    <input type="text" class="form-control" id="mail_server" name="mail_server" 
+                                           value="{{ config.mail_server }}" placeholder="e.g., smtp.gmail.com" required>
+                                    <small class="form-text text-muted">SMTP server address</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_port" class="form-label">SMTP Port:</label>
+                                    <input type="number" class="form-control" id="mail_port" name="mail_port" 
+                                           value="{{ config.mail_port }}" placeholder="587" required>
+                                    <small class="form-text text-muted">Usually 587 (TLS) or 465 (SSL)</small>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="mail_use_tls" name="mail_use_tls" 
+                                           {% if config.mail_use_tls %}checked{% endif %}>
+                                    <label class="form-check-label" for="mail_use_tls">
+                                        Use TLS (recommended)
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_username" class="form-label">Username/Email:</label>
+                                    <input type="text" class="form-control" id="mail_username" name="mail_username" 
+                                           value="{{ config.mail_username }}" placeholder="your-email@gmail.com">
+                                    <small class="form-text text-muted">SMTP username (often your email)</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_password" class="form-label">Password/App Password:</label>
+                                    <input type="password" class="form-control" id="mail_password" name="mail_password" 
+                                           placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                    <small class="form-text text-muted">SMTP password or app password (encrypted)</small>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_from_email" class="form-label">From Email Address:</label>
+                                    <input type="email" class="form-control" id="mail_from_email" name="mail_from_email" 
+                                           value="{{ config.mail_from_email }}" placeholder="noreply@example.com">
+                                    <small class="form-text text-muted">Email address shown in "From" field</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_from_name" class="form-label">From Display Name:</label>
+                                    <input type="text" class="form-control" id="mail_from_name" name="mail_from_name" 
+                                           value="{{ config.mail_from_name }}" placeholder="Ministering Interview App">
+                                    <small class="form-text text-muted">Display name shown in "From" field</small>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <button type="submit" class="btn btn-primary">💾 Save Email Settings</button>
+                                <a href="{{ url_for('send_test_email') }}" class="btn btn-secondary">✉️ Send Test Email</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- SMS Settings Tab -->
+            <div class="tab-pane fade" id="sms" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">SMS Configuration</h5>
+                        <form method="POST" action="{{ url_for('save_system_settings') }}" id="sms-form">
+                            <input type="hidden" name="config_type" value="sms">
+
+                            <div class="mb-4">
+                                <label for="sms_provider" class="form-label">SMS Provider:</label>
+                                <select class="form-select" id="sms_provider" name="sms_provider" required onchange="toggleSMSProvider()">
+                                    <option value="twilio" {% if config.sms_provider == 'twilio' %}selected{% endif %}>Twilio</option>
+                                    <option value="aws_sns" {% if config.sms_provider == 'aws_sns' %}selected{% endif %}>AWS SNS</option>
+                                    <option value="signalwire" {% if config.sms_provider == 'signalwire' %}selected{% endif %}>SignalWire</option>
+                                </select>
+                                <small class="form-text text-muted">Select your SMS service provider</small>
+                            </div>
+
+                            <!-- Twilio Settings -->
+                            <div id="twilio-settings" class="provider-settings">
+                                <h6 class="mb-3">Twilio Configuration</h6>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="twilio_account_sid" class="form-label">Account SID:</label>
+                                        <input type="text" class="form-control" id="twilio_account_sid" name="twilio_account_sid"
+                                               value="{{ config.twilio_account_sid }}" placeholder="AC...">
+                                        <small class="form-text text-muted">Found in your Twilio console (encrypted)</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="twilio_auth_token" class="form-label">Auth Token:</label>
+                                        <input type="password" class="form-control" id="twilio_auth_token" name="twilio_auth_token"
+                                               placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                        <small class="form-text text-muted">Auth token (encrypted)</small>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="twilio_phone_number" class="form-label">Phone Number:</label>
+                                    <input type="tel" class="form-control" id="twilio_phone_number" name="twilio_phone_number"
+                                           value="{{ config.twilio_phone_number }}" placeholder="+1234567890">
+                                    <small class="form-text text-muted">Phone number from your Twilio account</small>
+                                </div>
+                            </div>
+
+                            <!-- AWS SNS Settings -->
+                            <div id="aws-settings" class="provider-settings" style="display: none;">
+                                <h6 class="mb-3">AWS SNS Configuration</h6>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="aws_access_key_id" class="form-label">Access Key ID:</label>
+                                        <input type="text" class="form-control" id="aws_access_key_id" name="aws_access_key_id"
+                                               value="{{ config.aws_access_key_id }}" placeholder="AKIA...">
+                                        <small class="form-text text-muted">AWS IAM access key (encrypted)</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="aws_secret_access_key" class="form-label">Secret Access Key:</label>
+                                        <input type="password" class="form-control" id="aws_secret_access_key" name="aws_secret_access_key"
+                                               placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                        <small class="form-text text-muted">AWS secret key (encrypted)</small>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="aws_region" class="form-label">AWS Region:</label>
+                                        <input type="text" class="form-control" id="aws_region" name="aws_region"
+                                               value="{{ config.aws_region }}" placeholder="us-east-1">
+                                        <small class="form-text text-muted">AWS region (e.g., us-east-1, us-west-2)</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="aws_sns_sender_id" class="form-label">Sender ID (Optional):</label>
+                                        <input type="text" class="form-control" id="aws_sns_sender_id" name="aws_sns_sender_id"
+                                               value="{{ config.aws_sns_sender_id }}" placeholder="YourAppName">
+                                        <small class="form-text text-muted">Sender ID shown on SMS (11 chars max)</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- SignalWire Settings -->
+                            <div id="signalwire-settings" class="provider-settings" style="display: none;">
+                                <h6 class="mb-3">SignalWire Configuration</h6>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="signalwire_project_id" class="form-label">Project ID:</label>
+                                        <input type="text" class="form-control" id="signalwire_project_id" name="signalwire_project_id"
+                                               value="{{ config.signalwire_project_id }}" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+                                        <small class="form-text text-muted">Found in your SignalWire dashboard (encrypted)</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="signalwire_auth_token" class="form-label">Auth Token:</label>
+                                        <input type="password" class="form-control" id="signalwire_auth_token" name="signalwire_auth_token"
+                                               placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                        <small class="form-text text-muted">API token (encrypted)</small>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label for="signalwire_space_url" class="form-label">Space URL:</label>
+                                        <input type="text" class="form-control" id="signalwire_space_url" name="signalwire_space_url"
+                                               value="{{ config.signalwire_space_url }}" placeholder="example.signalwire.com">
+                                        <small class="form-text text-muted">Your SignalWire space domain</small>
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label for="signalwire_phone_number" class="form-label">Phone Number:</label>
+                                        <input type="tel" class="form-control" id="signalwire_phone_number" name="signalwire_phone_number"
+                                               value="{{ config.signalwire_phone_number }}" placeholder="+1234567890">
+                                        <small class="form-text text-muted">Phone number from your SignalWire account</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 mt-4">
+                                <button type="submit" class="btn btn-primary">💾 Save SMS Settings</button>
+                                <a href="{{ url_for('send_test_sms') }}" class="btn btn-secondary">📱 Send Test SMS</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scheduler Settings Tab -->
+            <div class="tab-pane fade" id="scheduler" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">Automated Reminder Scheduler</h5>
+                        <form method="POST" action="{{ url_for('save_system_settings') }}">
+                            <input type="hidden" name="config_type" value="scheduler">
+
+                            <div class="mb-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="reminder_enabled" name="reminder_enabled"
+                                           {% if config.reminder_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="reminder_enabled">
+                                        <strong>Enable Automated Reminders</strong>
+                                    </label>
+                                </div>
+                                <small class="form-text text-muted">Send automatic reminders to members who haven't booked interviews</small>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="reminder_day_of_week" class="form-label">Day of Week:</label>
+                                    <select class="form-select" id="reminder_day_of_week" name="reminder_day_of_week">
+                                        <option value="0" {% if config.reminder_day_of_week == 0 %}selected{% endif %}>Monday</option>
+                                        <option value="1" {% if config.reminder_day_of_week == 1 %}selected{% endif %}>Tuesday</option>
+                                        <option value="2" {% if config.reminder_day_of_week == 2 %}selected{% endif %}>Wednesday</option>
+                                        <option value="3" {% if config.reminder_day_of_week == 3 %}selected{% endif %}>Thursday</option>
+                                        <option value="4" {% if config.reminder_day_of_week == 4 %}selected{% endif %}>Friday</option>
+                                        <option value="5" {% if config.reminder_day_of_week == 5 %}selected{% endif %}>Saturday</option>
+                                        <option value="6" {% if config.reminder_day_of_week == 6 %}selected{% endif %}>Sunday</option>
+                                    </select>
+                                    <small class="form-text text-muted">Which day to send reminders</small>
+                                </div>
+
+                                <div class="col-md-3 mb-3">
+                                    <label for="reminder_hour" class="form-label">Hour:</label>
+                                    <select class="form-select" id="reminder_hour" name="reminder_hour">
+                                        {% for h in range(24) %}
+                                        <option value="{{ h }}" {% if config.reminder_hour == h %}selected{% endif %}>
+                                            {% if h == 0 %}12 AM{% elif h < 12 %}{{ h }} AM{% elif h == 12 %}12 PM{% else %}{{ h - 12 }} PM{% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="form-text text-muted">Hour (24-hour)</small>
+                                </div>
+
+                                <div class="col-md-3 mb-3">
+                                    <label for="reminder_minute" class="form-label">Minute:</label>
+                                    <select class="form-select" id="reminder_minute" name="reminder_minute">
+                                        {% for m in [0, 15, 30, 45] %}
+                                        <option value="{{ m }}" {% if config.reminder_minute == m %}selected{% endif %}>:{{ '%02d'|format(m) }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="form-text text-muted">Minute</small>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-info mb-3" id="schedule-preview">
+                                <strong>Current Schedule:</strong>
+                                <span id="preview-text"></span>
+                            </div>
+
+                            <div class="mb-3">
+                                <button type="submit" class="btn btn-primary">💾 Save Scheduler Settings</button>
+                                <a href="{{ url_for('trigger_reminders_manually') }}" class="btn btn-secondary">▶️ Run Reminder Job Now (Test)</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <h5>Security Note</h5>
+            <p class="text-muted">
+                <i class="bi bi-shield-check"></i>
+                All sensitive information (passwords, auth tokens) is encrypted in the database using AES encryption.
+                Password fields show as blanks for security - they only need to be filled when changing them.
+            </p>
+        </div>
+
+<script>
+function toggleSMSProvider() {
+    const provider = document.getElementById('sms_provider').value;
+    document.querySelectorAll('.provider-settings').forEach(el => el.style.display = 'none');
+
+    if (provider === 'twilio') {
+        document.getElementById('twilio-settings').style.display = 'block';
+    } else if (provider === 'aws_sns') {
+        document.getElementById('aws-settings').style.display = 'block';
+    } else if (provider === 'signalwire') {
+        document.getElementById('signalwire-settings').style.display = 'block';
+    }
+}
+
+// Call on page load to show the correct provider settings
+document.addEventListener('DOMContentLoaded', function() {
+    toggleSMSProvider();
+    updateSchedulePreview();
+});
+
+// Update schedule preview when dropdown values change
+function updateSchedulePreview() {
+    const enabled = document.getElementById('reminder_enabled').checked;
+    const dayOfWeek = parseInt(document.getElementById('reminder_day_of_week').value);
+    const hour = parseInt(document.getElementById('reminder_hour').value);
+    const minute = parseInt(document.getElementById('reminder_minute').value);
+
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    const displayMinute = minute.toString().padStart(2, '0');
+
+    const previewText = document.getElementById('preview-text');
+    if (enabled) {
+        previewText.textContent = `Reminders will be sent every ${days[dayOfWeek]} at ${displayHour}:${displayMinute} ${ampm}`;
+        previewText.style.color = '#0f5132';
+    } else {
+        previewText.textContent = 'Automated reminders are disabled';
+        previewText.style.color = '#842029';
+    }
+}
+
+// Attach event listeners
+document.getElementById('reminder_enabled').addEventListener('change', updateSchedulePreview);
+document.getElementById('reminder_day_of_week').addEventListener('change', updateSchedulePreview);
+document.getElementById('reminder_hour').addEventListener('change', updateSchedulePreview);
+document.getElementById('reminder_minute').addEventListener('change', updateSchedulePreview);
+</script>
+
+{% endblock %}

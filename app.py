@@ -7,8 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from datetime import datetime, timedelta
 from collections import defaultdict
-from sqlalchemy import func
-from twilio_config import twilio_client, twilio_number
+from sqlalchemy import func, extract
 import secrets
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -18,22 +17,29 @@ from selenium.webdriver.chrome.service import Service
 import time
 import uuid
 import threading
+from cryptography.fernet import Fernet
+import base64
+import hashlib
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+import atexit
 
 # Global thread-safe storage for progress data
 progress_store = {}
 progress_lock = threading.Lock()
 
+# Global SMS client storage
+sms_config = {
+    'provider': None,
+    'client': None,
+    'from_number': None
+}
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = secrets.token_hex(16)
+#app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(16))
+app.config['SECRET_KEY'] = "your-secret-key-here123456789012"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///interviews.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Email configuration (update with your SMTP settings)
-app.config['MAIL_SERVER'] = 'localhost'
-app.config['MAIL_PORT'] = 1025
-app.config['MAIL_USE_TLS'] = False
-app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
-app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 
 # Flask-User configuration
 app.config['USER_APP_NAME'] = 'Ministering Interview App'
@@ -56,6 +62,285 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=7)
 db = SQLAlchemy(app)
 mail = Mail(app)
 
+# Initialize APScheduler
+scheduler = BackgroundScheduler()
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+atexit.register(lambda: scheduler.shutdown())
+
+# Encryption utilities for sensitive config data
+class EncryptionHelper:
+    """Helper class to encrypt/decrypt sensitive configuration data"""
+    
+    @staticmethod
+    def get_cipher():
+        """Get encryption cipher using SECRET_KEY"""
+        # Use first 32 bytes of SECRET_KEY as encryption key
+        key = base64.urlsafe_b64encode(hashlib.sha256(app.config['SECRET_KEY'].encode()).digest())
+        return Fernet(key)
+    
+    @staticmethod
+    def encrypt(value):
+        """Encrypt a string value"""
+        if not value:
+            return None
+        try:
+            cipher = EncryptionHelper.get_cipher()
+            encrypted = cipher.encrypt(value.encode())
+            return encrypted.decode()
+        except Exception as e:
+            print(f"Encryption error: {e}")
+            return value
+    
+    @staticmethod
+    def decrypt(encrypted_value):
+        """Decrypt an encrypted string value"""
+        if not encrypted_value:
+            return None
+        try:
+            cipher = EncryptionHelper.get_cipher()
+            decrypted = cipher.decrypt(encrypted_value.encode())
+            return decrypted.decode()
+        except Exception as e:
+            print(f"Decryption error: {e}")
+            return encrypted_value
+
+def apply_email_config():
+    """Load email config from database and apply to Flask app config"""
+    try:
+        config = SystemConfig.query.first()
+        if config:
+            decrypted = config.decrypt_fields()
+            app.config['MAIL_SERVER'] = decrypted['mail_server']
+            app.config['MAIL_PORT'] = decrypted['mail_port']
+            app.config['MAIL_USE_TLS'] = decrypted['mail_use_tls']
+            app.config['MAIL_USERNAME'] = decrypted['mail_username']
+            app.config['MAIL_PASSWORD'] = decrypted['mail_password']
+            app.config['MAIL_DEFAULT_SENDER'] = decrypted['mail_from_email']
+            return decrypted['mail_from_email']
+    except Exception as e:
+        print(f"Error loading email config: {e}")
+    return None
+
+def apply_sms_config():
+    """Load SMS config from database and initialize SMS client"""
+    global sms_config
+    try:
+        config = SystemConfig.query.first()
+        if not config:
+            return False
+
+        decrypted = config.decrypt_fields()
+        provider = decrypted.get('sms_provider', 'twilio')
+
+        if provider == 'twilio':
+            account_sid = decrypted.get('twilio_account_sid')
+            auth_token = decrypted.get('twilio_auth_token')
+            phone_number = decrypted.get('twilio_phone_number')
+
+            if account_sid and auth_token and phone_number:
+                from twilio.rest import Client
+                sms_config['provider'] = 'twilio'
+                sms_config['client'] = Client(account_sid, auth_token)
+                sms_config['from_number'] = phone_number
+                return True
+
+        elif provider == 'aws_sns':
+            access_key = decrypted.get('aws_access_key_id')
+            secret_key = decrypted.get('aws_secret_access_key')
+            region = decrypted.get('aws_region')
+
+            if access_key and secret_key and region:
+                import boto3
+                sms_config['provider'] = 'aws_sns'
+                sms_config['client'] = boto3.client(
+                    'sns',
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    region_name=region
+                )
+                sms_config['sender_id'] = decrypted.get('aws_sns_sender_id', '')
+                return True
+
+        elif provider == 'signalwire':
+            project_id = decrypted.get('signalwire_project_id')
+            auth_token = decrypted.get('signalwire_auth_token')
+            space_url = decrypted.get('signalwire_space_url')
+            phone_number = decrypted.get('signalwire_phone_number')
+
+            if project_id and auth_token and space_url and phone_number:
+                from signalwire.rest import Client as SignalWireClient
+                sms_config['provider'] = 'signalwire'
+                sms_config['client'] = SignalWireClient(project_id, auth_token, signalwire_space_url=space_url)
+                sms_config['from_number'] = phone_number
+                return True
+
+    except Exception as e:
+        print(f"Error loading SMS config: {e}")
+
+    return False
+
+def send_sms(to_number, message):
+    """Send SMS using configured provider"""
+    global sms_config
+
+    if not sms_config.get('provider') or not sms_config.get('client'):
+        print("SMS not configured")
+        return False
+
+    try:
+        if sms_config['provider'] == 'twilio':
+            sms_config['client'].messages.create(
+                body=message,
+                from_=sms_config['from_number'],
+                to=to_number
+            )
+            return True
+
+        elif sms_config['provider'] == 'aws_sns':
+            params = {
+                'PhoneNumber': to_number,
+                'Message': message
+            }
+            if sms_config.get('sender_id'):
+                params['MessageAttributes'] = {
+                    'AWS.SNS.SMS.SenderID': {
+                        'DataType': 'String',
+                        'StringValue': sms_config['sender_id']
+                    }
+                }
+            sms_config['client'].publish(**params)
+            return True
+
+        elif sms_config['provider'] == 'signalwire':
+            sms_config['client'].messages.create(
+                body=message,
+                from_=sms_config['from_number'],
+                to=to_number
+            )
+            return True
+
+    except Exception as e:
+        print(f"Error sending SMS: {e}")
+        return False
+
+    return False
+
+def reschedule_reminder_job(config):
+    """Reschedule the reminder job based on config settings"""
+    try:
+        # Remove existing job if it exists
+        if scheduler.get_job('booking_reminders'):
+            scheduler.remove_job('booking_reminders')
+
+        # Only add job if reminders are enabled
+        if config.reminder_enabled:
+            # Map day of week to cron format (0=Mon in our DB, mon in cron)
+            day_map = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+            day_of_week = day_map[config.reminder_day_of_week]
+
+            scheduler.add_job(
+                func=send_booking_reminders,
+                trigger=CronTrigger(
+                    day_of_week=day_of_week,
+                    hour=config.reminder_hour,
+                    minute=config.reminder_minute
+                ),
+                id='booking_reminders',
+                name='Send booking reminders to members without appointments',
+                replace_existing=True
+            )
+            print(f"Reminder job rescheduled: {day_of_week.capitalize()} at {config.reminder_hour}:{config.reminder_minute:02d}")
+        else:
+            print("Reminder job disabled")
+    except Exception as e:
+        print(f"Error rescheduling reminder job: {e}")
+
+def send_booking_reminders():
+    """
+    Scheduled job: Send reminders to members who haven't booked for current quarter.
+    Schedule configured in System Settings.
+    """
+    with app.app_context():
+        try:
+            # Get current quarter
+            today = datetime.now().date()
+            current_quarter = ((today.month - 1) // 3) + 1
+            current_year = today.year
+
+            # Load email and SMS configs
+            sender_email = apply_email_config()
+            apply_sms_config()
+
+            if not sender_email:
+                print("Email not configured, skipping reminder job")
+                return
+
+            # Find all members without bookings for current quarter
+            members_without_bookings = []
+            all_members = Member.query.join(Team).join(District).all()
+
+            for member in all_members:
+                if not member.has_booking_for_quarter(current_quarter, current_year):
+                    members_without_bookings.append(member)
+
+            print(f"Found {len(members_without_bookings)} members without bookings for Q{current_quarter} {current_year}")
+
+            # Send notifications
+            email_sent = 0
+            sms_sent = 0
+            errors = []
+
+            for member in members_without_bookings:
+                link = url_for('schedule', token=member.token, _external=True)
+
+                # Send email
+                if member.email:
+                    try:
+                        msg = Message(
+                            f'Reminder: Schedule Your Interview for Q{current_quarter}',
+                            sender=sender_email,
+                            recipients=[member.email]
+                        )
+                        msg.body = f'''Hello {member.name},
+
+This is a reminder to schedule your ministering interview for Quarter {current_quarter} of {current_year}.
+
+Click the link below to view available times and book your interview:
+{link}
+
+If your companion has already booked, you'll see their appointment highlighted so you can join them.
+
+Thank you!
+'''
+                        msg.html = f'''<p>Hello {member.name},</p>
+<p>This is a reminder to schedule your ministering interview for <strong>Quarter {current_quarter} of {current_year}</strong>.</p>
+<p><a href="{link}">Click here to view available times and book your interview</a></p>
+<p>If your companion has already booked, you'll see their appointment highlighted so you can join them.</p>
+<p>Thank you!</p>
+'''
+                        mail.send(msg)
+                        email_sent += 1
+                    except Exception as e:
+                        errors.append(f"Email to {member.email}: {str(e)}")
+
+                # Send SMS if enabled
+                if member.can_receive_sms():
+                    try:
+                        sms_message = f"Reminder: Schedule your Q{current_quarter} ministering interview. Click: {link}"
+                        if send_sms(member.phone, sms_message):
+                            sms_sent += 1
+                    except Exception as e:
+                        errors.append(f"SMS to {member.phone}: {str(e)}")
+
+            print(f"Booking reminders sent: {email_sent} emails, {sms_sent} SMS")
+            if errors:
+                print(f"Errors: {errors}")
+
+        except Exception as e:
+            print(f"Error in send_booking_reminders job: {str(e)}")
+
 # Context processor to make 'now' available in all templates
 @app.context_processor
 def inject_now():
@@ -64,15 +349,21 @@ def inject_now():
 # Redirect authenticated users away from login page, based on role
 @app.before_request
 def redirect_authenticated_user():
-    if current_user.is_authenticated and request.endpoint == 'user.login':
-        next_url = request.args.get('next')
-        if next_url:
-            return redirect(next_url)
-        # Redirect based on role
-        if current_user.role == 'admin':
-            return redirect(url_for('admin'))
-        else:  # interviewer
-            return redirect(url_for('interviewer_dashboard'))
+    try:
+        if current_user.is_authenticated and request.endpoint == 'user.login':
+            next_url = request.args.get('next')
+            if next_url:
+                return redirect(next_url)
+            # Redirect based on role
+            if current_user.role == 'admin':
+                return redirect(url_for('admin'))
+            else:  # interviewer
+                return redirect(url_for('interviewer_dashboard'))
+    except AttributeError:
+        # User session is invalid (user was deleted), clear the session
+        from flask import session as flask_session
+        flask_session.clear()
+        # Allow the request to continue to handle properly
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -94,8 +385,97 @@ class UserInvitation(db.Model):
     created_by_user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     is_used = db.Column(db.Boolean, default=False)
 
+class SystemConfig(db.Model):
+    """System configuration for email and SMS settings"""
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Email settings
+    mail_server = db.Column(db.String(255), default='localhost')
+    mail_port = db.Column(db.Integer, default=1025)
+    mail_use_tls = db.Column(db.Boolean, default=False)
+    mail_username = db.Column(db.String(255))  # Will be encrypted
+    mail_password = db.Column(db.Text)  # Encrypted
+    mail_from_email = db.Column(db.String(255))
+    mail_from_name = db.Column(db.String(255), default='Ministering Interview App')
+
+    # SMS settings - provider selection
+    sms_provider = db.Column(db.String(50), default='twilio')  # twilio, aws_sns, signalwire
+
+    # Twilio settings
+    twilio_account_sid = db.Column(db.String(255))  # Encrypted
+    twilio_auth_token = db.Column(db.Text)  # Encrypted
+    twilio_phone_number = db.Column(db.String(20))
+
+    # AWS SNS settings
+    aws_access_key_id = db.Column(db.String(255))  # Encrypted
+    aws_secret_access_key = db.Column(db.Text)  # Encrypted
+    aws_region = db.Column(db.String(50))  # e.g., us-east-1
+    aws_sns_sender_id = db.Column(db.String(50))  # Optional sender ID
+
+    # SignalWire settings
+    signalwire_project_id = db.Column(db.String(255))  # Encrypted
+    signalwire_auth_token = db.Column(db.Text)  # Encrypted
+    signalwire_space_url = db.Column(db.String(255))  # e.g., example.signalwire.com
+    signalwire_phone_number = db.Column(db.String(20))
+
+    # Automated reminder scheduler settings
+    reminder_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    reminder_day_of_week = db.Column(db.Integer, nullable=False, default=0)  # 0=Monday, 6=Sunday
+    reminder_hour = db.Column(db.Integer, nullable=False, default=9)  # 0-23
+    reminder_minute = db.Column(db.Integer, nullable=False, default=0)  # 0-59
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+    
+    def encrypt_fields(self):
+        """Encrypt sensitive fields before saving"""
+        if self.mail_username:
+            self.mail_username = EncryptionHelper.encrypt(self.mail_username)
+        if self.mail_password:
+            self.mail_password = EncryptionHelper.encrypt(self.mail_password)
+        if self.twilio_account_sid:
+            self.twilio_account_sid = EncryptionHelper.encrypt(self.twilio_account_sid)
+        if self.twilio_auth_token:
+            self.twilio_auth_token = EncryptionHelper.encrypt(self.twilio_auth_token)
+        if self.aws_access_key_id:
+            self.aws_access_key_id = EncryptionHelper.encrypt(self.aws_access_key_id)
+        if self.aws_secret_access_key:
+            self.aws_secret_access_key = EncryptionHelper.encrypt(self.aws_secret_access_key)
+        if self.signalwire_project_id:
+            self.signalwire_project_id = EncryptionHelper.encrypt(self.signalwire_project_id)
+        if self.signalwire_auth_token:
+            self.signalwire_auth_token = EncryptionHelper.encrypt(self.signalwire_auth_token)
+    
+    def decrypt_fields(self):
+        """Decrypt sensitive fields when retrieving"""
+        return {
+            'mail_server': self.mail_server,
+            'mail_port': self.mail_port,
+            'mail_use_tls': self.mail_use_tls,
+            'mail_username': EncryptionHelper.decrypt(self.mail_username) if self.mail_username else '',
+            'mail_password': EncryptionHelper.decrypt(self.mail_password) if self.mail_password else '',
+            'mail_from_email': self.mail_from_email,
+            'mail_from_name': self.mail_from_name,
+            'sms_provider': self.sms_provider,
+            'twilio_account_sid': EncryptionHelper.decrypt(self.twilio_account_sid) if self.twilio_account_sid else '',
+            'twilio_auth_token': EncryptionHelper.decrypt(self.twilio_auth_token) if self.twilio_auth_token else '',
+            'twilio_phone_number': self.twilio_phone_number,
+            'aws_access_key_id': EncryptionHelper.decrypt(self.aws_access_key_id) if self.aws_access_key_id else '',
+            'aws_secret_access_key': EncryptionHelper.decrypt(self.aws_secret_access_key) if self.aws_secret_access_key else '',
+            'aws_region': self.aws_region,
+            'aws_sns_sender_id': self.aws_sns_sender_id,
+            'signalwire_project_id': EncryptionHelper.decrypt(self.signalwire_project_id) if self.signalwire_project_id else '',
+            'signalwire_auth_token': EncryptionHelper.decrypt(self.signalwire_auth_token) if self.signalwire_auth_token else '',
+            'signalwire_space_url': self.signalwire_space_url,
+            'signalwire_phone_number': self.signalwire_phone_number,
+            'reminder_enabled': self.reminder_enabled,
+            'reminder_day_of_week': self.reminder_day_of_week,
+            'reminder_hour': self.reminder_hour,
+            'reminder_minute': self.reminder_minute,
+        }
+
 # Flask-User setup (after User model is defined)
-user_manager = UserManager(app, db, User)
+user_manager = None  # Will be initialized in main
 
 # Admin access decorator
 def admin_required(f):
@@ -128,6 +508,21 @@ class Member(db.Model):
     phone = db.Column(db.String(20))
     email = db.Column(db.String(120), nullable=False)
     token = db.Column(db.String(32), unique=True, nullable=False, default=lambda: secrets.token_hex(16))
+    no_sms = db.Column(db.Boolean, nullable=False, default=False)  # Disable SMS for this member
+
+    def has_booking_for_quarter(self, quarter, year=None):
+        """Check if member has a booking for the specified quarter"""
+        if year is None:
+            year = datetime.now().year
+        bookings = Booking.query.filter_by(member_id=self.id).join(InterviewSlot).filter(
+            InterviewSlot.quarter == quarter,
+            db.extract('year', InterviewSlot.date) == year
+        ).first()
+        return bookings is not None
+
+    def can_receive_sms(self):
+        """Check if member can receive SMS (has phone and SMS not disabled)"""
+        return bool(self.phone and not self.no_sms)
 
 class InterviewSlot(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -480,9 +875,20 @@ def invite_user():
             
             # Send invitation email
             invite_link = url_for('accept_invitation', token=token, _external=True)
+            
+            # Load email config
+            sender_email = apply_email_config()
+            if not sender_email:
+                flash('Email configuration not set up. Please configure email settings first.', 'error')
+                db.session.delete(invitation)
+                db.session.commit()
+                return redirect(url_for('invite_user'))
+            
+            print(f"Using MAIL_SERVER: {app.config.get('MAIL_SERVER')}, MAIL_PORT: {app.config.get('MAIL_PORT')}, MAIL_USE_TLS: {app.config.get('MAIL_USE_TLS')}")
+            
             msg = Message(
                 'You are invited to Ministering Interview App',
-                sender=app.config['MAIL_USERNAME'],
+                sender=sender_email,
                 recipients=[email]
             )
             msg.body = f'''You have been invited to join the Ministering Interview App as a {role}.
@@ -946,7 +1352,32 @@ def schedule(token):
     ).outerjoin(Booking).group_by(InterviewSlot.id).having(
         func.count(Booking.id) < InterviewSlot.max_slots
     ).order_by(InterviewSlot.date, InterviewSlot.start_time).all()
-    return render_template('schedule.html', member=member, slots=available_slots)
+
+    # Find member's current booking for this quarter
+    my_booking = Booking.query.join(InterviewSlot).filter(
+        Booking.member_id == member.id,
+        InterviewSlot.quarter == current_quarter,
+        InterviewSlot.date >= datetime.now().date()
+    ).first()
+
+    # Find if any companion (team member) has already booked a slot
+    companion_booking = None
+    if member.team:
+        for team_member in member.team.members:
+            if team_member.id != member.id:  # Check other team members
+                booking = Booking.query.join(InterviewSlot).filter(
+                    Booking.member_id == team_member.id,
+                    InterviewSlot.quarter == current_quarter,
+                    InterviewSlot.date >= datetime.now().date()
+                ).first()
+                if booking:
+                    companion_booking = {
+                        'slot': booking.slot,
+                        'companion_name': team_member.name
+                    }
+                    break  # Only show first companion's booking
+
+    return render_template('schedule.html', member=member, slots=available_slots, companion_booking=companion_booking, my_booking=my_booking)
 
 @app.route('/book/<int:slot_id>/<token>', methods=['POST'])
 def book_slot(slot_id, token):
@@ -970,32 +1401,95 @@ def book_slot(slot_id, token):
         booking = Booking(slot_id=slot_id, member_id=member.id)
         db.session.add(booking)
         db.session.commit()
-        flash('Slot booked successfully!')
+        flash('Slot booked successfully!', 'success')
     else:
-        flash('Slot is full.')
-    
+        flash('Slot is full.', 'error')
+
+    return redirect(url_for('schedule', token=token))
+
+@app.route('/unbook/<token>', methods=['POST'])
+def unbook_slot(token):
+    member = Member.query.filter_by(token=token).first_or_404()
+    current_quarter = ((datetime.now().month - 1) // 3) + 1
+
+    # Find member's current booking for this quarter
+    booking = Booking.query.join(InterviewSlot).filter(
+        Booking.member_id == member.id,
+        InterviewSlot.quarter == current_quarter,
+        InterviewSlot.date >= datetime.now().date()
+    ).first()
+
+    if booking:
+        db.session.delete(booking)
+        db.session.commit()
+        flash('Your booking has been cancelled. You can now book a different time slot.', 'success')
+    else:
+        flash('No booking found to cancel.', 'error')
+
     return redirect(url_for('schedule', token=token))
 
 @app.route('/admin/send_notifications/<int:district_id>')
 @admin_required
 def send_notifications(district_id):
     district = District.query.get_or_404(district_id)
-    slots = InterviewSlot.query.filter_by(district_id=district_id).all()
-    
+
+    # Get current quarter
+    today = datetime.now().date()
+    current_quarter = ((today.month - 1) // 3) + 1
+    current_year = today.year
+
+    # Check if there are any available slots for this district in current quarter
+    available_slots = InterviewSlot.query.filter_by(district_id=district_id).filter(
+        InterviewSlot.date >= today,
+        InterviewSlot.quarter == current_quarter
+    ).all()
+
+    if not available_slots:
+        flash('No interview slots available for the current quarter. Please create slots before sending notifications.', 'warning')
+        return redirect(url_for('district_detail', id=district_id))
+
+    # Load email and SMS config
+    sender_email = apply_email_config()
+    sms_configured = apply_sms_config()
+
+    if not sender_email:
+        flash('Email not configured. Please configure email settings before sending notifications.', 'error')
+        return redirect(url_for('district_detail', id=district_id))
+
+    sent_count = 0
+    skipped_count = 0
+
     for team in district.teams:
         for member in team.members:
+            # Skip if member already has a booking for current quarter
+            if member.has_booking_for_quarter(current_quarter, current_year):
+                skipped_count += 1
+                continue
+
             link = url_for('schedule', token=member.token, _external=True)
+
             # Send email
             if member.email:
-                msg = Message('Interview Scheduling', sender=app.config['MAIL_USERNAME'], 
-                            recipients=[member.email])
-                msg.body = f'Please schedule your interview: {link}'
-                mail.send(msg)
-            # Send SMS (placeholder - integrate Twilio)
-            if member.phone and twilio_client:
-                twilio_client.messages.create(body=f'Interview link: {link}', from_=twilio_number, to=member.phone)
-    
-    flash('Notifications sent!')
+                try:
+                    msg = Message('Ministering Interview', sender=sender_email,
+                                recipients=[member.email])
+                    msg.body = f'Please schedule your interview: {link}'
+                    mail.send(msg)
+                    sent_count += 1
+                except Exception as e:
+                    print(f"Failed to send email to {member.email}: {e}")
+
+            # Send SMS (only if enabled and configured)
+            if sms_configured and member.can_receive_sms():
+                try:
+                    send_sms(member.phone, f'Interview link: {link}')
+                except Exception as e:
+                    print(f"Failed to send SMS to {member.phone}: {e}")
+
+    message = f'Notifications sent to {sent_count} members.'
+    if skipped_count > 0:
+        message += f' Skipped {skipped_count} members who already have bookings.'
+    flash(message, 'success')
     return redirect(url_for('district_detail', id=district_id))
 
 @app.route('/admin/add_booking/<int:slot_id>', methods=['POST'])
@@ -1188,6 +1682,7 @@ def edit_member(member_id):
         member.name = request.form['name']
         member.phone = request.form['phone']
         member.email = request.form['email']
+        member.no_sms = request.form.get('no_sms') == 'on'
         db.session.commit()
         flash(f'Updated {member.name}!')
         return redirect(url_for('district_detail', id=member.team.district_id))
@@ -1441,27 +1936,256 @@ def import_csv_confirm():
     # Display confirmation
     return render_template('import_confirm.html', scraped_districts=scraped_districts, confirm_endpoint='import_csv_confirm')
 
+@app.route('/admin/trigger_reminders')
+@admin_required
+def trigger_reminders_manually():
+    """Manually trigger the booking reminder job (for testing)"""
+    try:
+        send_booking_reminders()
+        flash('Reminder job executed successfully! Check console for details.', 'success')
+    except Exception as e:
+        flash(f'Error running reminder job: {str(e)}', 'error')
+    return redirect(url_for('admin'))
+
 @app.route('/admin/send_all_notifications')
+@admin_required
 def send_all_notifications():
     districts = District.query.all()
-    total_sent = 0
+
+    # Get current quarter
+    today = datetime.now().date()
+    current_quarter = ((today.month - 1) // 3) + 1
+    current_year = today.year
+
+    # Load email and SMS config
+    sender_email = apply_email_config()
+    sms_configured = apply_sms_config()
+
+    if not sender_email:
+        flash('Email not configured. Please configure email settings before sending notifications.', 'error')
+        return redirect(url_for('admin'))
+
+    sent_count = 0
+    skipped_count = 0
+    districts_without_slots = []
+
     for district in districts:
+        # Check if this specific district has available slots for current quarter
+        district_slots = InterviewSlot.query.filter(
+            InterviewSlot.district_id == district.id,
+            InterviewSlot.date >= today,
+            InterviewSlot.quarter == current_quarter
+        ).count()
+
+        if district_slots == 0:
+            # Skip this entire district if no slots available
+            districts_without_slots.append(district.name)
+            continue
+
         for team in district.teams:
             for member in team.members:
+                # Skip if member already has a booking for current quarter
+                if member.has_booking_for_quarter(current_quarter, current_year):
+                    skipped_count += 1
+                    continue
+
                 link = url_for('schedule', token=member.token, _external=True)
+
+                # Send email
                 if member.email:
-                    msg = Message('Interview Scheduling', sender=app.config['MAIL_USERNAME'], 
-                                recipients=[member.email])
-                    msg.body = f'Please schedule your interview: {link}'
-                    mail.send(msg)
-                    total_sent += 1
-                if member.phone and twilio_client:
-                    twilio_client.messages.create(body=f'Interview link: {link}', from_=twilio_number, to=member.phone)
-                    total_sent += 1
-    flash(f'Notifications sent to {total_sent} contacts!')
+                    try:
+                        msg = Message('Ministering Interview', sender=sender_email,
+                                    recipients=[member.email])
+                        msg.body = f'Please schedule your interview: {link}'
+                        mail.send(msg)
+                        sent_count += 1
+                    except Exception as e:
+                        print(f"Failed to send email to {member.email}: {e}")
+
+                # Send SMS (only if enabled and configured)
+                if sms_configured and member.can_receive_sms():
+                    try:
+                        send_sms(member.phone, f'Interview link: {link}')
+                    except Exception as e:
+                        print(f"Failed to send SMS to {member.phone}: {e}")
+
+    message = f'Notifications sent to {sent_count} members.'
+    if skipped_count > 0:
+        message += f' Skipped {skipped_count} members who already have bookings.'
+    if districts_without_slots:
+        message += f' Skipped districts without slots: {", ".join(districts_without_slots)}.'
+    flash(message, 'success')
     return redirect(url_for('admin'))
+
+# System Settings Routes
+@app.route('/admin/settings', methods=['GET'])
+@admin_required
+def system_settings():
+    """Display system settings page"""
+    config = SystemConfig.query.first()
+    if not config:
+        config = SystemConfig()
+    else:
+        # Decrypt fields for display
+        config = type('obj', (object,), config.decrypt_fields())()
+    
+    return render_template('system_settings.html', config=config)
+
+@app.route('/admin/settings/save', methods=['POST'])
+@admin_required
+def save_system_settings():
+    """Save system settings"""
+    config_type = request.form.get('config_type')
+    
+    # Get or create config
+    config = SystemConfig.query.first()
+    if not config:
+        config = SystemConfig()
+    
+    try:
+        if config_type == 'email':
+            config.mail_server = request.form.get('mail_server', 'localhost')
+            config.mail_port = int(request.form.get('mail_port', 1025))
+            config.mail_use_tls = request.form.get('mail_use_tls') == 'on'
+            config.mail_username = request.form.get('mail_username', '')
+            config.mail_from_email = request.form.get('mail_from_email', '')
+            config.mail_from_name = request.form.get('mail_from_name', 'Ministering Interview App')
+            
+            # Only update password if provided
+            mail_password = request.form.get('mail_password', '')
+            if mail_password:
+                config.mail_password = mail_password
+            
+        elif config_type == 'sms':
+            config.sms_provider = request.form.get('sms_provider', 'twilio')
+
+            # Twilio settings
+            if config.sms_provider == 'twilio':
+                config.twilio_account_sid = request.form.get('twilio_account_sid', '')
+                config.twilio_phone_number = request.form.get('twilio_phone_number', '')
+                twilio_auth_token = request.form.get('twilio_auth_token', '')
+                if twilio_auth_token:
+                    config.twilio_auth_token = twilio_auth_token
+
+            # AWS SNS settings
+            elif config.sms_provider == 'aws_sns':
+                config.aws_access_key_id = request.form.get('aws_access_key_id', '')
+                config.aws_region = request.form.get('aws_region', '')
+                config.aws_sns_sender_id = request.form.get('aws_sns_sender_id', '')
+                aws_secret_key = request.form.get('aws_secret_access_key', '')
+                if aws_secret_key:
+                    config.aws_secret_access_key = aws_secret_key
+
+            # SignalWire settings
+            elif config.sms_provider == 'signalwire':
+                config.signalwire_project_id = request.form.get('signalwire_project_id', '')
+                config.signalwire_space_url = request.form.get('signalwire_space_url', '')
+                config.signalwire_phone_number = request.form.get('signalwire_phone_number', '')
+                signalwire_auth_token = request.form.get('signalwire_auth_token', '')
+                if signalwire_auth_token:
+                    config.signalwire_auth_token = signalwire_auth_token
+
+        elif config_type == 'scheduler':
+            config.reminder_enabled = request.form.get('reminder_enabled') == 'on'
+            config.reminder_day_of_week = int(request.form.get('reminder_day_of_week', 0))
+            config.reminder_hour = int(request.form.get('reminder_hour', 9))
+            config.reminder_minute = int(request.form.get('reminder_minute', 0))
+
+            # Reschedule the reminder job with new settings
+            reschedule_reminder_job(config)
+
+        # Encrypt sensitive fields before saving
+        config.encrypt_fields()
+
+        db.session.add(config)
+        db.session.commit()
+        
+        flash(f'{config_type.capitalize()} settings saved successfully!', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error saving settings: {str(e)}', 'error')
+    
+    return redirect(url_for('system_settings'))
+
+@app.route('/admin/settings/test-email')
+@admin_required
+def send_test_email():
+    """Send a test email"""
+    config = SystemConfig.query.first()
+    if not config:
+        flash('System settings not configured yet.', 'error')
+        return redirect(url_for('system_settings'))
+    
+    try:
+        # Decrypt and apply settings
+        decrypted = config.decrypt_fields()
+        app.config['MAIL_SERVER'] = decrypted['mail_server']
+        app.config['MAIL_PORT'] = decrypted['mail_port']
+        app.config['MAIL_USE_TLS'] = decrypted['mail_use_tls']
+        app.config['MAIL_USERNAME'] = decrypted['mail_username']
+        app.config['MAIL_PASSWORD'] = decrypted['mail_password']
+        
+        msg = Message(
+            'Test Email from Ministering Interview App',
+            sender=decrypted['mail_from_email'],
+            recipients=[current_user.email]
+        )
+        msg.body = 'This is a test email to verify your email settings are working correctly.'
+        mail.send(msg)
+        
+        flash(f'Test email sent successfully to {current_user.email}!', 'success')
+    except Exception as e:
+        flash(f'Failed to send test email: {str(e)}', 'error')
+    
+    return redirect(url_for('system_settings'))
+
+@app.route('/admin/settings/test-sms')
+@admin_required
+def send_test_sms():
+    """Send a test SMS"""
+    config = SystemConfig.query.first()
+    if not config:
+        flash('System settings not configured yet.', 'error')
+        return redirect(url_for('system_settings'))
+
+    try:
+        # Reload SMS config
+        if not apply_sms_config():
+            flash('SMS not configured. Please configure SMS settings first.', 'error')
+            return redirect(url_for('system_settings'))
+
+        # Get current user's phone or use a test number
+        # For now, just show a success message (actual SMS requires admin to provide their phone)
+        flash('SMS configuration is valid. To send a test SMS, add your phone number and implement test SMS functionality.', 'info')
+    except Exception as e:
+        flash(f'Failed to test SMS configuration: {str(e)}', 'error')
+
+    return redirect(url_for('system_settings'))
 
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        # Load email config from database if it exists (for Flask-User compatibility)
+        apply_email_config()
+        # Load SMS config from database
+        apply_sms_config()
+        # Initialize Flask-User after config is loaded
+        user_manager = UserManager(app, db, User)
+
+        # Schedule automated reminder job based on database settings
+        config = SystemConfig.query.first()
+        if config:
+            reschedule_reminder_job(config)
+        else:
+            # Default schedule if no config exists
+            print("No system config found, using default schedule (Monday 9:00 AM)")
+            scheduler.add_job(
+                func=send_booking_reminders,
+                trigger=CronTrigger(day_of_week='mon', hour=9, minute=0),
+                id='booking_reminders',
+                name='Send booking reminders to members without appointments',
+                replace_existing=True
+            )
+
     app.run(debug=True, host='0.0.0.0', port=8181)

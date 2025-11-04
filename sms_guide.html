@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Options for the Church App: An Admin Guide</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f8f9fa; color: #222; margin: 0; padding: 0; }
+        .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 32px; }
+        h1, h2, h3 { color: #2c3e50; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2em; }
+        th, td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
+        th { background: #f0f0f0; }
+        tr:nth-child(even) { background: #fafbfc; }
+        .faq { margin-bottom: 2em; }
+        .faq h3 { margin-top: 1.5em; }
+        .note { background: #eaf6ff; border-left: 4px solid #2196f3; padding: 12px 18px; margin: 1.5em 0; border-radius: 4px; }
+        ul, ol { margin-bottom: 1em; }
+        code { background: #f4f4f4; padding: 2px 6px; border-radius: 3px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>SMS Options for the Church App: An Admin Guide</h1>
+    <p>This guide compares three major SMS services (AWS, SignalWire, and Twilio) across two main setup options: 1-Way (manual replies) and 2-Way Automated Replies.</p>
+    <div class="note">
+        <strong>Key Insight:</strong><br>
+        Because we are a non-profit volunteer group without an EIN and want minimal cost/hassle, the simplest and most compliant option is to use <b>AWS for 1-Way sending, and put a personal phone number in the message for replies.</b>
+    </div>
+
+    <h2>Option 1: 1-Way Messaging (Manual Replies via a Personal Number in the Message)</h2>
+    <p>This method uses the service only to send outbound messages. Replies come to a personal cell phone.</p>
+    <table>
+        <tr>
+            <th>Feature</th>
+            <th>AWS SNS</th>
+            <th>SignalWire</th>
+            <th>Twilio</th>
+        </tr>
+        <tr>
+            <td>Setup Complexity</td>
+            <td>Low (Need an AWS account)</td>
+            <td>Medium (Register as Sole Prop)</td>
+            <td>Medium (Register as Sole Prop)</td>
+        </tr>
+        <tr>
+            <td>Costs (400 Msgs)</td>
+            <td>~$1.94/month (Boto3/API)</td>
+            <td>~$1.60 + ~$0.50/mo number fee</td>
+            <td>~$3.32 + ~$1.15/mo number fee</td>
+        </tr>
+        <tr>
+            <td>2-Way Messaging</td>
+            <td>Manual on personal phone</td>
+            <td>Manual on personal phone</td>
+            <td>Manual on personal phone</td>
+        </tr>
+        <tr>
+            <td>A2P 10DLC Reg</td>
+            <td>Required (even for 1-way)</td>
+            <td>Required (Sole Prop supported)</td>
+            <td>Required (Sole Prop supported)</td>
+        </tr>
+        <tr>
+            <td>"STOP" Handling</td>
+            <td>Manual on personal phone</td>
+            <td>Manual on personal phone</td>
+            <td>Manual on personal phone</td>
+        </tr>
+        <tr>
+            <td>Best For</td>
+            <td>Lowest overall cost for volume</td>
+            <td>Cheaper long-term rates</td>
+            <td>Maximum reliability/documentation</td>
+        </tr>
+    </table>
+    <ol>
+        <li><b>Choose a Provider &amp; Create Account:</b> Sign up for an account (AWS is the cheapest starting point).</li>
+        <li><b>A2P Registration (US Only):</b> This is mandatory for all providers. Register your "Brand" as a "Sole Proprietor" using personal details. Register a "Low Volume" campaign to ensure messages deliver. This involves small one-time and recurring monthly fees.</li>
+        <li><b>Use the API to Send:</b> Use the respective Python libraries (<code>boto3</code>, <code>signalwire</code>, <code>twilio</code>) to send messages.</li>
+        <li><b>Message Format:</b> Ensure every message includes the church admin's personal number for replies:<br>
+            <i>Example:</i> <code>Hi, your apt link is [link]. Call/text John at (555) 123-4567 for questions.</code>
+        </li>
+    </ol>
+
+    <h2>Option 2: 2-Way Automated Messaging (Replies Handled by the App)</h2>
+    <p>This method automates reply handling (e.g., auto-confirmations, "STOP" handling) and keeps all communication within the app's system. It requires significant setup and a publicly accessible Python server.</p>
+    <table>
+        <tr>
+            <th>Feature</th>
+            <th>AWS EUM/Pinpoint v2</th>
+            <th>SignalWire</th>
+            <th>Twilio</th>
+        </tr>
+        <tr>
+            <td>Setup Complexity</td>
+            <td>High (SNS topics, Lambda, Boto3)</td>
+            <td>High (Webhooks, Python Server)</td>
+            <td>High (Webhooks, Python Server)</td>
+        </tr>
+        <tr>
+            <td>Costs (400 Msgs)</td>
+            <td>~$3.94+/month (+$2 number fee + inbound msgs)</td>
+            <td>~$2.10+/month</td>
+            <td>~$4.47+/month</td>
+        </tr>
+        <tr>
+            <td>2-Way Messaging</td>
+            <td>Fully Automated</td>
+            <td>Fully Automated</td>
+            <td>Fully Automated</td>
+        </tr>
+        <tr>
+            <td>A2P 10DLC Reg</td>
+            <td>Required</td>
+            <td>Required</td>
+            <td>Required</td>
+        </tr>
+        <tr>
+            <td>"STOP" Handling</td>
+            <td>Automatic</td>
+            <td>Automatic</td>
+            <td>Automatic</td>
+        </tr>
+        <tr>
+            <td>Best For</td>
+            <td>Fully professional, automated</td>
+            <td>Best cost for automation</td>
+            <td>Most robust feature set</td>
+        </tr>
+    </table>
+    <ol>
+        <li><b>Lease a Dedicated Number:</b> Lease a dedicated 10-digit number or toll-free number from the provider (monthly fee applies).</li>
+        <li><b>A2P Registration:</b> Complete the mandatory A2P Sole Proprietor Brand and Campaign registration.</li>
+        <li><b>Configure Inbound Routing:</b>
+            <ul>
+                <li><b>AWS:</b> Configure the dedicated number to publish incoming messages to an SNS Topic, which triggers an AWS Lambda function running your Python code.</li>
+                <li><b>SignalWire/Twilio:</b> Set up a public-facing URL in your Python Flask/Django app that the provider can send webhooks to when a message arrives.</li>
+            </ul>
+        </li>
+        <li><b>Code the Logic:</b> Write the Python code to parse replies (STOP, YES, etc.) and send appropriate automated responses back via the API.</li>
+        <li><b>Alert Admins:</b> Configure the Python code to send an email or SMS notification to an admin when a message arrives that requires human interaction.</li>
+    </ol>
+
+    <h2>Admin Recommendation Summary</h2>
+    <ul>
+        <li>Use the free tier of AWS SNS for sending the booking links.</li>
+        <li>Add a line of text in the message providing a personal number for any questions or replies.</li>
+        <li>Avoid the complexity and recurring monthly fees of the full 2-way messaging systems.</li>
+    </ul>
+
+    <h2>Frequently Asked Questions</h2>
+    <div class="faq">
+        <h3>What are the exact Sole Proprietor registration steps on SignalWire and Twilio?</h3>
+        <b>SignalWire:</b>
+        <ol>
+            <li>Sign up for a SignalWire account.</li>
+            <li>Go to Messaging → Campaign Registry.</li>
+            <li>Register your Brand as a "Sole Proprietor" (requires personal info, last 4 of SSN, and mobile verification).</li>
+            <li>Register a "Low Volume" campaign (for non-profits, churches, etc.).</li>
+            <li>Wait for approval and assign your campaign to your purchased number.</li>
+        </ol>
+        <b>Twilio:</b>
+        <ol>
+            <li>Sign up for a Twilio account.</li>
+            <li>Go to Messaging → Regulatory Compliance → A2P 10DLC.</li>
+            <li>Register your Brand as a "Sole Proprietor" (requires personal info, last 4 of SSN, and mobile verification).</li>
+            <li>Register a "Low Volume" campaign.</li>
+            <li>Assign the campaign to your Twilio number.</li>
+        </ol>
+    </div>
+    <div class="faq">
+        <h3>Explain the types of SMS campaigns available and which one is best for a church app</h3>
+        <ul>
+            <li><b>Low Volume (Sole Proprietor):</b> For individuals, small groups, or non-profits sending fewer than 3,000 messages/day. <i>Best for church apps!</i></li>
+            <li><b>Standard Campaign:</b> For businesses with higher volume or more complex messaging needs.</li>
+            <li><b>Charity/Non-Profit Campaign:</b> For registered 501(c)(3) organizations (requires EIN).</li>
+        </ul>
+        <p><b>For a church app:</b> Use the <b>Low Volume/Sole Proprietor</b> campaign unless you have an EIN and high volume.</p>
+    </div>
+    <div class="faq">
+        <h3>Explain the advantages of using dedicated SMS numbers over personal ones for a church app</h3>
+        <ul>
+            <li><b>Compliance:</b> Dedicated numbers are required for A2P 10DLC registration and legal compliance.</li>
+            <li><b>Professionalism:</b> Messages come from a consistent, recognizable number.</li>
+            <li><b>Privacy:</b> Keeps personal numbers private.</li>
+            <li><b>Automation:</b> Enables 2-way messaging and automated replies if needed.</li>
+            <li><b>Scalability:</b> Easier to manage as your needs grow.</li>
+        </ul>
+    </div>
+    <div class="note">
+        If you have further questions or need help with setup, contact your app administrator!
+    </div>
+</div>
+</body>
+</html>

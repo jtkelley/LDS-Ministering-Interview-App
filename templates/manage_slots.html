@@ -3,18 +3,6 @@
 {% block title %}Manage Slots{% endblock %}
 
 {% block content %}
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    {% if 'slot' in message.lower() or 'delete' in message.lower() or 'created' in message.lower() %}
-                    <div class="alert alert-{{ 'danger' if category == 'error' else 'warning' if category == 'warning' else 'success' if category == 'success' else 'info' }} alert-dismissible fade show" role="alert">
-                        {{ message|safe }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                    {% endif %}
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
         <h1 class="mb-4">Manage Interview Slots for {{ district.name }}</h1>
         <div class="row">
             <div class="col-md-6">
