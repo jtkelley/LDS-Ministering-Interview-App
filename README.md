@@ -102,38 +102,18 @@ This application streamlines the process of scheduling and conducting quarterly 
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables:**
-   Create a `.env` file in the root directory:
-   ```env
-   # Email Configuration (Required)
-   MAIL_USERNAME=your-email@gmail.com
-   MAIL_PASSWORD=your-app-password
-
-   # Optional: SMS Configuration (choose one provider)
-   # AWS SNS
-   AWS_ACCESS_KEY_ID=your-access-key
-   AWS_SECRET_ACCESS_KEY=your-secret-key
-   AWS_REGION=us-east-1
-
-   # Or Twilio
-   TWILIO_ACCOUNT_SID=your-account-sid
-   TWILIO_AUTH_TOKEN=your-auth-token
-   TWILIO_PHONE_NUMBER=+1234567890
-
-   # Or SignalWire
-   SIGNALWIRE_PROJECT_ID=your-project-id
-   SIGNALWIRE_AUTH_TOKEN=your-auth-token
-   SIGNALWIRE_SPACE_URL=yourspace.signalwire.com
-   SIGNALWIRE_PHONE_NUMBER=+1234567890
-   ```
-
-5. **Run the application:**
+4. **Run the application:**
    ```bash
    python app.py
    ```
 
-6. **Access the application:**
+5. **Access the application:**
    Open your browser to `http://localhost:8181`
+
+6. **Complete setup through the web interface:**
+   - All configuration (email, SMS, scheduler) is done through the web UI
+   - Navigate to **Admin → System Settings** after first login
+   - No environment variables or `.env` file needed!
 
 ---
 
@@ -257,9 +237,10 @@ Ministering-Interviews/
 
 ## 🔧 Configuration
 
-### System Settings
+### System Settings (All UI-Based - No Environment Variables!)
 
-All configuration is managed through the web UI at **Admin → System Settings**:
+**Important:** All configuration is managed through the web UI at **Admin → System Settings**.
+Email, SMS, and scheduler settings are stored encrypted in the database. No `.env` file or environment variables are needed for credentials!
 
 #### **📧 Email Settings**
 - SMTP server and port
@@ -342,13 +323,19 @@ The application includes a comprehensive in-app guide with cost comparisons and 
    - Set build command: `pip install -r requirements.txt`
    - Set run command: `python app.py`
 
-3. **Configure Environment Variables:**
-   - Add all variables from `.env` file
-   - Set `DATABASE_URL` for PostgreSQL (optional)
+3. **Configure Environment Variables (Optional):**
+   - `DATABASE_URL` - If using PostgreSQL instead of SQLite (recommended for production)
+   - **Note:** Email and SMS credentials are configured through the web UI, not environment variables!
 
 4. **Deploy:**
    - Click "Deploy" and wait for build to complete
    - Access your app at the provided URL
+
+5. **Configure via Web UI:**
+   - Log in to admin panel
+   - Navigate to **System Settings**
+   - Configure Email, SMS, and Scheduler settings
+   - All credentials are encrypted and stored in the database
 
 ### Other Deployment Options
 
@@ -398,12 +385,12 @@ This entire application was developed using **AI-assisted programming** with Cla
 ## 🛡️ Security
 
 ### Implemented Security Measures:
-- ✅ **Encrypted Credentials**: All API keys and passwords encrypted with Fernet (AES)
+- ✅ **Encrypted Credentials**: All API keys and passwords encrypted with Fernet (AES) in database
 - ✅ **Secure Tokens**: 32-character random hex tokens for member scheduling links
 - ✅ **Role-Based Access**: Admin-only routes protected with `@admin_required` decorator
 - ✅ **Password Hashing**: User passwords hashed with Flask-User
 - ✅ **HTTPS Recommended**: Use SSL/TLS in production
-- ✅ **Environment Variables**: Sensitive data in `.env` file (not committed to Git)
+- ✅ **Database Encryption**: All sensitive credentials stored encrypted in SystemConfig table
 - ✅ **SQL Injection Prevention**: SQLAlchemy ORM with parameterized queries
 - ✅ **XSS Prevention**: Jinja2 auto-escaping enabled
 
