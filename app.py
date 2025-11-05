@@ -1,5 +1,5 @@
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, session, send_file, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_mail import Mail, Message
 from flask_user import UserManager, UserMixin, current_user
@@ -303,7 +303,7 @@ def send_booking_reminders():
 
             # Find all members without bookings for current quarter
             members_without_bookings = []
-            all_members = Member.query.join(Team).join(District).all()
+            all_members = Member.query.join(Companionship).join(District).all()
 
             for member in all_members:
                 if not member.has_booking_for_quarter(current_quarter, current_year):
@@ -574,16 +574,17 @@ class District(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     interviewer_name = db.Column(db.String(100), nullable=False)
-    teams = db.relationship('Team', backref='district', lazy=True)
+    companionships = db.relationship('Companionship', backref='district', lazy=True)
 
-class Team(db.Model):
+class Companionship(db.Model):
+    __tablename__ = 'companionship'
     id = db.Column(db.Integer, primary_key=True)
     district_id = db.Column(db.Integer, db.ForeignKey('district.id'), nullable=False)
-    members = db.relationship('Member', backref='team', lazy=True)
+    members = db.relationship('Member', backref='companionship', lazy=True)
 
 class Member(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    team_id = db.Column(db.Integer, db.ForeignKey('team.id'), nullable=True)
+    companionship_id = db.Column(db.Integer, db.ForeignKey('companionship.id'), nullable=True)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20))
     email = db.Column(db.String(120), nullable=False)
@@ -625,6 +626,22 @@ class Booking(db.Model):
     member_id = db.Column(db.Integer, db.ForeignKey('member.id'), nullable=False)
     member = db.relationship('Member', backref='bookings')
 
+class NotificationLog(db.Model):
+    """Track when notifications are sent to members"""
+    __tablename__ = 'notification_log'
+    id = db.Column(db.Integer, primary_key=True)
+    member_id = db.Column(db.Integer, db.ForeignKey('member.id'), nullable=False)
+    member = db.relationship('Member', backref='notifications')
+    method = db.Column(db.String(10), nullable=False)  # 'email' or 'sms'
+    sent_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    quarter = db.Column(db.Integer, nullable=False)
+    year = db.Column(db.Integer, nullable=False)
+    success = db.Column(db.Boolean, nullable=False, default=True)
+    error_message = db.Column(db.Text, nullable=True)
+
+    def __repr__(self):
+        return f'<NotificationLog {self.member.name if self.member else "Unknown"} - {self.method} - Q{self.quarter} {self.year}>'
+
 # Custom login redirect handler
 @app.route('/login_redirect')
 def login_redirect():
@@ -648,20 +665,33 @@ def setup_admin():
     if request.method == 'POST':
         email = request.form.get('email')
         password = request.form.get('password')
-        if not email or not password:
-            flash('Email and password are required.')
+        confirm_password = request.form.get('confirm_password')
+
+        # Validate required fields
+        if not email or not password or not confirm_password:
+            flash('All fields are required.', 'error')
             return redirect(url_for('setup_admin'))
-        
+
+        # Check password match
+        if password != confirm_password:
+            flash('Passwords do not match. Please try again.', 'error')
+            return redirect(url_for('setup_admin'))
+
+        # Check minimum password length
+        if len(password) < 6:
+            flash('Password must be at least 6 characters long.', 'error')
+            return redirect(url_for('setup_admin'))
+
         # Check password length (Werkzeug limit is 72 bytes)
         if len(password.encode('utf-8')) > 72:
-            flash('Password must be 72 bytes or less. Please choose a shorter password.')
+            flash('Password must be 72 bytes or less. Please choose a shorter password.', 'error')
             return redirect(url_for('setup_admin'))
-        
+
         # Let Flask-User handle password hashing
         user = User(email=email, password=user_manager.hash_password(password), role='admin', active=True, email_confirmed_at=datetime.now())
         db.session.add(user)
         db.session.commit()
-        flash('Admin account created. Please log in.')
+        flash('Admin account created successfully! Please log in.', 'success')
         return redirect(url_for('user.login'))
     return render_template('setup_admin.html')
 
@@ -1280,26 +1310,26 @@ def district_detail(id):
     district = District.query.get_or_404(id)
     return render_template('district_detail.html', district=district)
 
-@app.route('/admin/district/<int:id>/team/new', methods=['GET', 'POST'])
+@app.route('/admin/district/<int:id>/companionship/new', methods=['GET', 'POST'])
 @admin_required
-def new_team(id):
+def new_companionship(id):
     district = District.query.get_or_404(id)
     if request.method == 'POST':
-        team = Team(district_id=id)
-        db.session.add(team)
+        companionship = Companionship(district_id=id)
+        db.session.add(companionship)
         db.session.commit()
         
         # Handle existing members
         existing_member_ids = request.form.getlist('existing_members[]')
         for member_id in existing_member_ids:
             member = Member.query.get(int(member_id))
-            if member and member.team.district_id == id:
+            if member and member.companionship.district_id == id:
                 # Cancel existing bookings
                 bookings = Booking.query.filter_by(member_id=member.id).all()
                 for booking in bookings:
                     db.session.delete(booking)
-                # Reassign to new team
-                member.team_id = team.id
+                # Reassign to new companionship
+                member.companionship_id = companionship.id
         
         # Add new members
         member_names = request.form.getlist('member_name[]')
@@ -1308,7 +1338,7 @@ def new_team(id):
         
         for name, phone, email in zip(member_names, member_phones, member_emails):
             if name:  # Only require name
-                member = Member(team_id=team.id, name=name, phone=phone, email=email)
+                member = Member(companionship_id =companionship.id, name=name, phone=phone, email=email)
                 db.session.add(member)
         
         db.session.commit()
@@ -1316,8 +1346,8 @@ def new_team(id):
         return redirect(url_for('district_detail', id=id))
     
     # Get existing members from all districts for reassignment
-    existing_members = Member.query.outerjoin(Team).outerjoin(District).order_by(District.name, Member.name).all()
-    return render_template('new_team.html', district=district, existing_members=existing_members)
+    existing_members = Member.query.outerjoin(Companionship).outerjoin(District).order_by(District.name, Member.name).all()
+    return render_template('new_companionship.html', district=district, existing_members=existing_members)
 
 @app.route('/admin/district/<int:id>/slots', methods=['GET', 'POST'])
 @admin_required
@@ -1424,7 +1454,7 @@ def manage_slots(id):
 @app.route('/schedule/<token>')
 def schedule(token):
     member = Member.query.filter_by(token=token).first_or_404()
-    district = member.team.district
+    district = member.companionship.district
     current_quarter = ((datetime.now().month - 1) // 3) + 1
     available_slots = InterviewSlot.query.filter_by(district_id=district.id).filter(
         InterviewSlot.date >= datetime.now().date(),
@@ -1440,20 +1470,20 @@ def schedule(token):
         InterviewSlot.date >= datetime.now().date()
     ).first()
 
-    # Find if any companion (team member) has already booked a slot
+    # Find if any companion (companionship member) has already booked a slot
     companion_booking = None
-    if member.team:
-        for team_member in member.team.members:
-            if team_member.id != member.id:  # Check other team members
+    if member.companionship:
+        for companionship_member in member.companionship.members:
+            if companionship_member.id != member.id:  # Check other companionship members
                 booking = Booking.query.join(InterviewSlot).filter(
-                    Booking.member_id == team_member.id,
+                    Booking.member_id == companionship_member.id,
                     InterviewSlot.quarter == current_quarter,
                     InterviewSlot.date >= datetime.now().date()
                 ).first()
                 if booking:
                     companion_booking = {
                         'slot': booking.slot,
-                        'companion_name': team_member.name
+                        'companion_name': companionship_member.name
                     }
                     break  # Only show first companion's booking
 
@@ -1470,11 +1500,11 @@ def book_slot(slot_id, token):
         flash('You are already booked for this slot.')
         return redirect(url_for('schedule', token=token))
     
-    # Check team restriction
+    # Check companionship restriction
     if slot.bookings:
-        existing_team = slot.bookings[0].member.team
-        if member.team != existing_team:
-            flash('This slot is reserved for another team.')
+        existing_companionship = slot.bookings[0].member.companionship
+        if member.companionship != existing_companionship:
+            flash('This slot is reserved for another companionship.')
             return redirect(url_for('schedule', token=token))
     
     if len(slot.bookings) < slot.max_slots:
@@ -1539,8 +1569,8 @@ def send_notifications(district_id):
     sent_count = 0
     skipped_count = 0
 
-    for team in district.teams:
-        for member in team.members:
+    for companionship in district.companionships:
+        for member in companionship.members:
             # Skip if member already has a booking for current quarter
             if member.has_booking_for_quarter(current_quarter, current_year):
                 skipped_count += 1
@@ -1556,16 +1586,61 @@ def send_notifications(district_id):
                     msg.body = f'Please schedule your interview: {link}'
                     mail.send(msg)
                     sent_count += 1
+
+                    # Log successful email send
+                    log = NotificationLog(
+                        member_id=member.id,
+                        method='email',
+                        quarter=current_quarter,
+                        year=current_year,
+                        success=True
+                    )
+                    db.session.add(log)
                 except Exception as e:
                     print(f"Failed to send email to {member.email}: {e}")
+
+                    # Log failed email send
+                    log = NotificationLog(
+                        member_id=member.id,
+                        method='email',
+                        quarter=current_quarter,
+                        year=current_year,
+                        success=False,
+                        error_message=str(e)
+                    )
+                    db.session.add(log)
 
             # Send SMS (only if enabled and configured)
             if sms_configured and member.can_receive_sms():
                 try:
                     sms_message = format_sms_message(link, member)
                     send_sms(member.phone, sms_message)
+
+                    # Log successful SMS send
+                    log = NotificationLog(
+                        member_id=member.id,
+                        method='sms',
+                        quarter=current_quarter,
+                        year=current_year,
+                        success=True
+                    )
+                    db.session.add(log)
                 except Exception as e:
                     print(f"Failed to send SMS to {member.phone}: {e}")
+
+                    # Log failed SMS send
+                    log = NotificationLog(
+                        member_id=member.id,
+                        method='sms',
+                        quarter=current_quarter,
+                        year=current_year,
+                        success=False,
+                        error_message=str(e)
+                    )
+                    db.session.add(log)
+
+    # Commit all notification logs
+    db.session.commit()
 
     message = f'Notifications sent to {sent_count} members.'
     if skipped_count > 0:
@@ -1585,11 +1660,11 @@ def add_booking(slot_id):
     if existing:
         flash(f'{member.name} is already booked for this slot.')
     else:
-        # Check team restriction
+        # Check companionship restriction
         if slot.bookings:
-            existing_team = slot.bookings[0].member.team
-            if member.team != existing_team:
-                flash('This slot is reserved for another team.')
+            existing_companionship = slot.bookings[0].member.companionship
+            if member.companionship != existing_companionship:
+                flash('This slot is reserved for another companionship.')
                 return redirect(url_for('admin'))
         
         if len(slot.bookings) < slot.max_slots:
@@ -1629,60 +1704,60 @@ def delete_slot(slot_id):
     flash('Interview slot deleted successfully!')
     return redirect(url_for('manage_slots', id=district_id))
 
-@app.route('/admin/team/<int:team_id>/add_member', methods=['GET', 'POST'])
+@app.route('/admin/companionship/<int:companionship_id>/add_member', methods=['GET', 'POST'])
 @admin_required
-def add_member(team_id):
-    team = Team.query.get_or_404(team_id)
-    
+def add_member(companionship_id):
+    companionship = Companionship.query.get_or_404(companionship_id)
+
     # Get all members from all districts for reassignment
-    all_members = Member.query.outerjoin(Team).outerjoin(District).order_by(District.name, Member.name).all()
-    
+    all_members = Member.query.outerjoin(Companionship).outerjoin(District).order_by(District.name, Member.name).all()
+
     if request.method == 'POST':
         # Check if reassigning an existing member or creating a new one
         existing_member_id = request.form.get('existing_member_id')
-        
+
         if existing_member_id:
-            # Reassign existing member to this team
+            # Reassign existing member to this companionship
             member = Member.query.get_or_404(existing_member_id)
-            
+
             # Remove any existing bookings
             bookings = Booking.query.filter_by(member_id=member.id).all()
             for booking in bookings:
                 db.session.delete(booking)
-            
-            # Reassign to new team
-            old_team_id = member.team_id
-            member.team_id = team_id
+
+            # Reassign to new companionship
+            old_companionship_id = member.companionship_id
+            member.companionship_id = companionship_id
             db.session.commit()
             flash(f'Reassigned {member.name} to this companionship!')
-            return redirect(url_for('district_detail', id=team.district_id))
+            return redirect(url_for('district_detail', id=companionship.district_id))
         else:
             # Create new member
             name = request.form['name']
             phone = request.form.get('phone', '')
             email = request.form['email']
             if name and email:
-                member = Member(team_id=team_id, name=name, phone=phone, email=email)
+                member = Member(companionship_id=companionship_id, name=name, phone=phone, email=email)
                 db.session.add(member)
                 db.session.commit()
                 flash(f'Added {name} to companionship!')
-                return redirect(url_for('district_detail', id=team.district_id))
-    
-    return render_template('add_member.html', team=team, all_members=all_members)
+                return redirect(url_for('district_detail', id=companionship.district_id))
+
+    return render_template('add_member.html', companionship=companionship, all_members=all_members)
 
 @app.route('/admin/unassign_member/<int:member_id>', methods=['POST'])
 @admin_required
 def unassign_member(member_id):
     member = Member.query.get_or_404(member_id)
-    district_id = member.team.district_id if member.team else None
+    district_id = member.companionship.district_id if member.companionship else None
     
     # Cancel any existing bookings
     bookings = Booking.query.filter_by(member_id=member_id).all()
     for booking in bookings:
         db.session.delete(booking)
     
-    # Unassign from team
-    member.team_id = None
+    # Unassign from companionship
+    member.companionship_id = None
     db.session.commit()
     flash(f'Unassigned {member.name} from companionship!')
     
@@ -1691,21 +1766,21 @@ def unassign_member(member_id):
     else:
         return redirect(url_for('manage_members'))
 
-@app.route('/admin/remove_team/<int:team_id>', methods=['POST'])
+@app.route('/admin/remove_companionship/<int:companionship_id>', methods=['POST'])
 @admin_required
-def remove_team(team_id):
-    team = Team.query.get_or_404(team_id)
-    district_id = team.district_id
-    name = f"Companionship {team.id}"
-    
+def remove_companionship(companionship_id):
+    companionship = Companionship.query.get_or_404(companionship_id)
+    district_id = companionship.district_id
+    name = f"Companionship {companionship.id}"
+
     # Remove all members and their bookings
-    for member in team.members:
+    for member in companionship.members:
         bookings = Booking.query.filter_by(member_id=member.id).all()
         for booking in bookings:
             db.session.delete(booking)
         db.session.delete(member)
-    
-    db.session.delete(team)
+
+    db.session.delete(companionship)
     db.session.commit()
     flash(f'{name} removed!')
     return redirect(url_for('district_detail', id=district_id))
@@ -1726,7 +1801,7 @@ def edit_district(id):
 @admin_required
 def manage_members():
     """View and manage all members across all districts."""
-    members = Member.query.outerjoin(Team).outerjoin(District).order_by(District.name.nulls_last(), Team.id.nulls_last(), Member.name).all()
+    members = Member.query.outerjoin(Companionship).outerjoin(District).order_by(District.name.nulls_last(), Companionship.id.nulls_last(), Member.name).all()
     districts = District.query.all()
     return render_template('manage_members.html', members=members, districts=districts)
 
@@ -1735,25 +1810,25 @@ def manage_members():
 def reassign_member(member_id):
     """Reassign a member to a different companionship."""
     member = Member.query.get_or_404(member_id)
-    new_team_id = request.form.get('new_team_id', type=int)
+    new_companionship_id = request.form.get('new_companionship_id', type=int)
     
-    if not new_team_id:
+    if not new_companionship_id:
         flash('Please select a companionship.')
         return redirect(url_for('manage_members'))
     
-    new_team = Team.query.get_or_404(new_team_id)
-    old_team_id = member.team_id
+    new_companionship = Companionship.query.get_or_404(new_companionship_id)
+    old_companionship_id = member.companionship_id
     
     # Remove any existing bookings
     bookings = Booking.query.filter_by(member_id=member_id).all()
     for booking in bookings:
         db.session.delete(booking)
     
-    # Reassign to new team
-    member.team_id = new_team_id
+    # Reassign to new companionship
+    member.companionship_id = new_companionship_id
     db.session.commit()
     
-    flash(f'Reassigned {member.name} to Companionship {new_team_id} in {new_team.district.name}')
+    flash(f'Reassigned {member.name} to Companionship {new_companionship_id} in {new_companionship.district.name}')
     return redirect(url_for('manage_members'))
 
 @app.route('/admin/edit_member/<int:member_id>', methods=['GET', 'POST'])
@@ -1766,7 +1841,7 @@ def edit_member(member_id):
         member.no_sms = request.form.get('no_sms') == 'on'
         db.session.commit()
         flash(f'Updated {member.name}!')
-        return redirect(url_for('district_detail', id=member.team.district_id))
+        return redirect(url_for('district_detail', id=member.companionship.district_id))
     return render_template('edit_member.html', member=member)
 
 def group_results_by_district(results):
@@ -1874,7 +1949,7 @@ def import_confirm():
                 Booking.query.delete()
                 InterviewSlot.query.delete()
                 Member.query.delete()
-                Team.query.delete()
+                Companionship.query.delete()
                 District.query.delete()
                 db.session.commit()
                 flash('Cleared all existing data for fresh import.')
@@ -1891,9 +1966,9 @@ def import_confirm():
                     db.session.commit()
                 
                 for comp_data in district_data['companionships']:
-                    # Create team
-                    team = Team(district_id=district.id)
-                    db.session.add(team)
+                    # Create companionship
+                    companionship = Companionship(district_id=district.id)
+                    db.session.add(companionship)
                     db.session.commit()
                     
                     for member_data in comp_data['members']:
@@ -1907,8 +1982,8 @@ def import_confirm():
                             # Update name if different
                             if existing_member.name != member_data['name']:
                                 existing_member.name = member_data['name']
-                            # Reassign to new team
-                            existing_member.team_id = team.id
+                            # Reassign to new companionship
+                            existing_member.companionship_id = companionship.id
                             member = existing_member
                         else:
                             # Create new member
@@ -1916,13 +1991,13 @@ def import_confirm():
                                 name=member_data['name'],
                                 phone=member_data['phone'],
                                 email=member_data['email'],
-                                team_id=team.id
+                                companionship_id =companionship.id
                             )
                             db.session.add(member)
                         
-                        # Ensure member is in the team
-                        if member not in team.members:
-                            team.members.append(member)
+                        # Ensure member is in the companionship
+                        if member not in companionship.members:
+                            companionship.members.append(member)
                     
                     db.session.commit()
             
@@ -1953,7 +2028,7 @@ def import_csv_confirm():
                 Booking.query.delete()
                 InterviewSlot.query.delete()
                 Member.query.delete()
-                Team.query.delete()
+                Companionship.query.delete()
                 District.query.delete()
                 db.session.commit()
                 flash('Cleared all existing data for fresh import.')
@@ -1970,9 +2045,9 @@ def import_csv_confirm():
                     db.session.commit()
                 
                 for comp_data in district_data['companionships']:
-                    # Create team
-                    team = Team(district_id=district.id)
-                    db.session.add(team)
+                    # Create companionship
+                    companionship = Companionship(district_id=district.id)
+                    db.session.add(companionship)
                     db.session.commit()
                     
                     for member_data in comp_data['members']:
@@ -1986,8 +2061,8 @@ def import_csv_confirm():
                             # Update name if different
                             if existing_member.name != member_data['name']:
                                 existing_member.name = member_data['name']
-                            # Reassign to new team
-                            existing_member.team_id = team.id
+                            # Reassign to new companionship
+                            existing_member.companionship_id = companionship.id
                             member = existing_member
                         else:
                             # Create new member
@@ -1995,13 +2070,13 @@ def import_csv_confirm():
                                 name=member_data['name'],
                                 phone=member_data['phone'],
                                 email=member_data['email'],
-                                team_id=team.id
+                                companionship_id =companionship.id
                             )
                             db.session.add(member)
                         
-                        # Ensure member is in the team
-                        if member not in team.members:
-                            team.members.append(member)
+                        # Ensure member is in the companionship
+                        if member not in companionship.members:
+                            companionship.members.append(member)
                     
                     db.session.commit()
             
@@ -2063,8 +2138,8 @@ def send_all_notifications():
             districts_without_slots.append(district.name)
             continue
 
-        for team in district.teams:
-            for member in team.members:
+        for companionship in district.companionships:
+            for member in companionship.members:
                 # Skip if member already has a booking for current quarter
                 if member.has_booking_for_quarter(current_quarter, current_year):
                     skipped_count += 1
@@ -2080,16 +2155,61 @@ def send_all_notifications():
                         msg.body = f'Please schedule your interview: {link}'
                         mail.send(msg)
                         sent_count += 1
+
+                        # Log successful email send
+                        log = NotificationLog(
+                            member_id=member.id,
+                            method='email',
+                            quarter=current_quarter,
+                            year=current_year,
+                            success=True
+                        )
+                        db.session.add(log)
                     except Exception as e:
                         print(f"Failed to send email to {member.email}: {e}")
+
+                        # Log failed email send
+                        log = NotificationLog(
+                            member_id=member.id,
+                            method='email',
+                            quarter=current_quarter,
+                            year=current_year,
+                            success=False,
+                            error_message=str(e)
+                        )
+                        db.session.add(log)
 
                 # Send SMS (only if enabled and configured)
                 if sms_configured and member.can_receive_sms():
                     try:
                         sms_message = format_sms_message(link, member)
                         send_sms(member.phone, sms_message)
+
+                        # Log successful SMS send
+                        log = NotificationLog(
+                            member_id=member.id,
+                            method='sms',
+                            quarter=current_quarter,
+                            year=current_year,
+                            success=True
+                        )
+                        db.session.add(log)
                     except Exception as e:
                         print(f"Failed to send SMS to {member.phone}: {e}")
+
+                        # Log failed SMS send
+                        log = NotificationLog(
+                            member_id=member.id,
+                            method='sms',
+                            quarter=current_quarter,
+                            year=current_year,
+                            success=False,
+                            error_message=str(e)
+                        )
+                        db.session.add(log)
+
+    # Commit all notification logs
+    db.session.commit()
 
     message = f'Notifications sent to {sent_count} members.'
     if skipped_count > 0:
@@ -2098,6 +2218,242 @@ def send_all_notifications():
         message += f' Skipped districts without slots: {", ".join(districts_without_slots)}.'
     flash(message, 'success')
     return redirect(url_for('admin'))
+
+@app.route('/admin/notification_report')
+@admin_required
+def notification_report():
+    """Generate report of notification sends by quarter"""
+    # Get current quarter
+    today = datetime.now().date()
+    current_quarter = ((today.month - 1) // 3) + 1
+    current_year = today.year
+
+    # Allow filtering by quarter and year
+    selected_quarter = request.args.get('quarter', current_quarter, type=int)
+    selected_year = request.args.get('year', current_year, type=int)
+
+    # Get filter parameters
+    filter_not_sent = request.args.get('not_sent', 'off') == 'on'
+    filter_sent = request.args.get('sent', 'off') == 'on'
+    filter_no_booking = request.args.get('no_booking', 'off') == 'on'
+
+    # Get all members grouped by district and companionship
+    districts = District.query.order_by(District.name).all()
+
+    # Build report data
+    report_data = []
+    for district in districts:
+        for companionship in district.companionships:
+            for member in companionship.members:
+                # Get notification logs for this member and quarter
+                notifications = NotificationLog.query.filter_by(
+                    member_id=member.id,
+                    quarter=selected_quarter,
+                    year=selected_year
+                ).order_by(NotificationLog.sent_at.desc()).all()
+
+                # Separate by method
+                email_logs = [n for n in notifications if n.method == 'email']
+                sms_logs = [n for n in notifications if n.method == 'sms']
+
+                email_sent = len(email_logs) > 0
+                sms_sent = len(sms_logs) > 0
+                any_sent = email_sent or sms_sent
+                has_booking = member.has_booking_for_quarter(selected_quarter, selected_year)
+
+                member_data = {
+                    'member': member,
+                    'district': district,
+                    'companionship': companionship,
+                    'email_sent': email_sent,
+                    'email_success': email_logs[0].success if email_logs else None,
+                    'email_sent_at': email_logs[0].sent_at if email_logs else None,
+                    'email_error': email_logs[0].error_message if email_logs and not email_logs[0].success else None,
+                    'sms_sent': sms_sent,
+                    'sms_success': sms_logs[0].success if sms_logs else None,
+                    'sms_sent_at': sms_logs[0].sent_at if sms_logs else None,
+                    'sms_error': sms_logs[0].error_message if sms_logs and not sms_logs[0].success else None,
+                    'has_booking': has_booking,
+                    'any_sent': any_sent
+                }
+
+                # Apply filters
+                if filter_not_sent and any_sent:
+                    continue
+                if filter_sent and not any_sent:
+                    continue
+                if filter_no_booking and has_booking:
+                    continue
+
+                report_data.append(member_data)
+
+    # Calculate summary statistics (from original data before filtering)
+    all_data = []
+    for district in districts:
+        for companionship in district.companionships:
+            for member in companionship.members:
+                notifications = NotificationLog.query.filter_by(
+                    member_id=member.id,
+                    quarter=selected_quarter,
+                    year=selected_year
+                ).all()
+                email_sent = any(n.method == 'email' for n in notifications)
+                sms_sent = any(n.method == 'sms' for n in notifications)
+                has_booking = member.has_booking_for_quarter(selected_quarter, selected_year)
+                all_data.append({
+                    'email_sent': email_sent,
+                    'sms_sent': sms_sent,
+                    'has_booking': has_booking
+                })
+
+    total_members = len(all_data)
+    email_sent_count = sum(1 for m in report_data if m['email_sent'])
+    sms_sent_count = sum(1 for m in report_data if m['sms_sent'])
+    no_notification_count = sum(1 for m in report_data if not m['email_sent'] and not m['sms_sent'])
+    has_booking_count = sum(1 for m in report_data if m['has_booking'])
+
+    # Get available quarters for dropdown (last 4 quarters)
+    available_quarters = []
+    for i in range(4):
+        q = current_quarter - i
+        y = current_year
+        if q <= 0:
+            q += 4
+            y -= 1
+        available_quarters.append({'quarter': q, 'year': y})
+
+    return render_template('notification_report.html',
+                         report_data=report_data,
+                         selected_quarter=selected_quarter,
+                         selected_year=selected_year,
+                         total_members=total_members,
+                         email_sent_count=email_sent_count,
+                         sms_sent_count=sms_sent_count,
+                         no_notification_count=no_notification_count,
+                         has_booking_count=has_booking_count,
+                         available_quarters=available_quarters)
+
+@app.route('/admin/send_individual_notification/<int:member_id>', methods=['POST'])
+@admin_required
+def send_individual_notification(member_id):
+    """Send notification to a single member"""
+    member = Member.query.get_or_404(member_id)
+
+    # Get current quarter
+    today = datetime.now().date()
+    current_quarter = ((today.month - 1) // 3) + 1
+    current_year = today.year
+
+    # Get member's district
+    district = member.companionship.district if member.companionship else None
+    if not district:
+        return jsonify({'success': False, 'error': 'Member is not assigned to a district'}), 400
+
+    # Check if there are any available slots for this district in current quarter
+    available_slots = InterviewSlot.query.filter_by(district_id=district.id).filter(
+        InterviewSlot.date >= today,
+        InterviewSlot.quarter == current_quarter
+    ).all()
+
+    if not available_slots:
+        return jsonify({'success': False, 'error': 'No interview slots available for the current quarter'}), 400
+
+    # Load email and SMS config
+    sender_email = apply_email_config()
+    sms_configured = apply_sms_config()
+
+    if not sender_email:
+        return jsonify({'success': False, 'error': 'Email not configured'}), 400
+
+    link = url_for('schedule', token=member.token, _external=True)
+    email_sent = False
+    sms_sent = False
+    errors = []
+
+    # Send email
+    if member.email:
+        try:
+            msg = Message('Ministering Interview', sender=sender_email,
+                        recipients=[member.email])
+            msg.body = f'Please schedule your interview: {link}'
+            mail.send(msg)
+            email_sent = True
+
+            # Log successful email send
+            log = NotificationLog(
+                member_id=member.id,
+                method='email',
+                quarter=current_quarter,
+                year=current_year,
+                success=True
+            )
+            db.session.add(log)
+        except Exception as e:
+            errors.append(f"Email failed: {str(e)}")
+
+            # Log failed email send
+            log = NotificationLog(
+                member_id=member.id,
+                method='email',
+                quarter=current_quarter,
+                year=current_year,
+                success=False,
+                error_message=str(e)
+            )
+            db.session.add(log)
+
+    # Send SMS (only if enabled and configured)
+    if sms_configured and member.can_receive_sms():
+        try:
+            sms_message = format_sms_message(link, member)
+            send_sms(member.phone, sms_message)
+            sms_sent = True
+
+            # Log successful SMS send
+            log = NotificationLog(
+                member_id=member.id,
+                method='sms',
+                quarter=current_quarter,
+                year=current_year,
+                success=True
+            )
+            db.session.add(log)
+        except Exception as e:
+            errors.append(f"SMS failed: {str(e)}")
+
+            # Log failed SMS send
+            log = NotificationLog(
+                member_id=member.id,
+                method='sms',
+                quarter=current_quarter,
+                year=current_year,
+                success=False,
+                error_message=str(e)
+            )
+            db.session.add(log)
+
+    # Commit all notification logs
+    db.session.commit()
+
+    # Prepare response message
+    messages = []
+    if email_sent:
+        messages.append('Email sent')
+    if sms_sent:
+        messages.append('SMS sent')
+
+    if not email_sent and not sms_sent:
+        return jsonify({
+            'success': False,
+            'error': ' | '.join(errors) if errors else 'No notifications sent'
+        }), 400
+
+    return jsonify({
+        'success': True,
+        'message': ' and '.join(messages),
+        'email_sent': email_sent,
+        'sms_sent': sms_sent
+    })
 
 # System Settings Routes
 @app.route('/admin/settings', methods=['GET'])

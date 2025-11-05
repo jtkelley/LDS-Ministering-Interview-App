@@ -7,26 +7,26 @@
         <p class="mb-4">Interviewer: {{ district.interviewer_name }}</p>
         <div class="mb-3">
             <a href="{{ url_for('edit_district', id=district.id) }}" class="btn btn-secondary me-2">Edit District</a>
-            <a href="{{ url_for('new_team', id=district.id) }}" class="btn btn-primary me-2">Add Companionship</a>
+            <a href="{{ url_for('new_companionship', id=district.id) }}" class="btn btn-primary me-2">Add Companionship</a>
             <a href="{{ url_for('manage_slots', id=district.id) }}" class="btn btn-info me-2">Manage Slots</a>
             <a href="{{ url_for('admin', district=district.id) }}" class="btn btn-success me-2">View Calendar</a>
             <a href="{{ url_for('send_notifications', district_id=district.id) }}" class="btn btn-warning">Send Notifications</a>
         </div>
         <h2 class="mb-3">Companionships</h2>
         <div class="list-group">
-        {% for team in district.teams %}
+        {% for companionship in district.companionships %}
             <div class="list-group-item">
                 <div class="d-flex justify-content-between align-items-center">
-                    <strong>Companionship {{ team.id }}</strong>
+                    <strong>Companionship {{ companionship.id }}</strong>
                     <div>
-                        <a href="{{ url_for('add_member', team_id=team.id) }}" class="btn btn-sm btn-outline-primary me-2">Add Member</a>
-                        <form method="POST" action="{{ url_for('remove_team', team_id=team.id) }}" style="display:inline;">
+                        <a href="{{ url_for('add_member', companionship_id=companionship.id) }}" class="btn btn-sm btn-outline-primary me-2">Add Member</a>
+                        <form method="POST" action="{{ url_for('remove_companionship', companionship_id=companionship.id) }}" style="display:inline;">
                             <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Remove this companionship and all its members?" data-confirm-variant="danger">Remove Companionship</button>
                         </form>
                     </div>
                 </div>
                 <ul class="list-group list-group-flush mt-2">
-                {% for member in team.members %}
+                {% for member in companionship.members %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         {{ member.name }} - {{ member.email }} {% if member.phone %}({{ member.phone }}){% endif %}
                         <div>

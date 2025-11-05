@@ -10,7 +10,7 @@
             <div class="row">
                 <div class="col-md-8">
                     <h4 class="alert-heading">👋 Welcome! Let's Get Started</h4>
-                    <p class="mb-0">No districts, teams, or members are set up yet. To begin, you'll need to populate your data. Choose one of these methods:</p>
+                    <p class="mb-0">No districts, companionships, or members are set up yet. To begin, you'll need to populate your data. Choose one of these methods:</p>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
@@ -126,20 +126,20 @@
                                         {% endif %}
                                         {% if slot.bookings|length < 10 %}
                                             {% set booked_ids = slot.bookings|map(attribute='member_id')|list %}
-                                            {% set allowed_team = slot.bookings[0].member.team if slot.bookings else None %}
+                                            {% set allowed_companionship = slot.bookings[0].member.companionship if slot.bookings else None %}
                                             <form method="POST" action="{{ url_for('add_booking', slot_id=slot.id) }}" class="mt-1">
                                                 <div class="input-group input-group-sm">
                                                     <select name="member_id" class="form-select select2" style="flex: 1;">
                                                         <option value="">Add member...</option>
-                                                        {% if allowed_team %}
-                                                            {% for member in allowed_team.members %}
+                                                        {% if allowed_companionship %}
+                                                            {% for member in allowed_companionship.members %}
                                                                 {% if member.id not in booked_ids %}
                                                                     <option value="{{ member.id }}">{{ member.name }}</option>
                                                                 {% endif %}
                                                             {% endfor %}
                                                         {% else %}
-                                                            {% for team in district.teams %}
-                                                                {% for member in team.members %}
+                                                            {% for companionship in district.companionships %}
+                                                                {% for member in companionship.members %}
                                                                     {% if member.id not in booked_ids %}
                                                                         <option value="{{ member.id }}">{{ member.name }}</option>
                                                                     {% endif %}

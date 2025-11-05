@@ -32,7 +32,7 @@
                 <p>Select members from {{ district.name }} to move to this new companionship:</p>
                 
                 <!-- Unassigned Members -->
-                {% set unassigned = existing_members | selectattr('team_id', 'none') | list %}
+                {% set unassigned = existing_members | selectattr('companionship_id', 'none') | list %}
                 {% if unassigned %}
                 <div class="mb-3">
                     <h6>Unassigned Members:</h6>
@@ -41,7 +41,7 @@
                             <option value="{{ member.id }}">
                                 {{ member.name }} - {{ member.email }} 
                                 {% if member.phone %}({{ member.phone }}){% endif %}
-                                {% if member.team and member.team.district %}({{ member.team.district.name }}){% endif %}
+                                {% if member.companionship and member.companionship.district %}({{ member.companionship.district.name }}){% endif %}
                             </option>
                         {% endfor %}
                     </select>
@@ -49,7 +49,7 @@
                 {% endif %}
                 
                 <!-- Assigned Members -->
-                {% set assigned = existing_members | selectattr('team_id', 'ne', none) | list %}
+                {% set assigned = existing_members | selectattr('companionship_id', 'ne', none) | list %}
                 {% if assigned %}
                 <div class="mb-3">
                     <h6>Assigned Members:</h6>
@@ -58,7 +58,7 @@
                             <option value="{{ member.id }}">
                                 {{ member.name }} - {{ member.email }} 
                                 {% if member.phone %}({{ member.phone }}){% endif %}
-                                - Currently in Companionship {{ member.team.id }} ({{ member.team.district.name }})
+                                - Currently in Companionship {{ member.companionship.id }} ({{ member.companionship.district.name }})
                             </option>
                         {% endfor %}
                     </select>

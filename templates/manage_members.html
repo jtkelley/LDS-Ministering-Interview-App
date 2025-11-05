@@ -47,26 +47,26 @@
                 </thead>
                 <tbody>
                     {% for member in members %}
-                    <tr {% if not member.team %}class="table-warning"{% endif %}>
+                    <tr {% if not member.companionship %}class="table-warning"{% endif %}>
                         <td>{{ member.name }}</td>
                         <td>{{ member.email }}</td>
                         <td>{{ member.phone or 'N/A' }}</td>
-                        <td>{{ member.team.district.name if member.team else 'Unassigned' }}</td>
-                        <td>{{ 'Companionship ' + member.team.id|string if member.team else 'Unassigned' }}</td>
+                        <td>{{ member.companionship.district.name if member.companionship else 'Unassigned' }}</td>
+                        <td>{{ 'Companionship ' + member.companionship.id|string if member.companionship else 'Unassigned' }}</td>
                         <td>
-                            {% if member.team %}
+                            {% if member.companionship %}
                             <form method="POST" action="{{ url_for('unassign_member', member_id=member.id) }}" style="display:inline-block;" class="me-2">
                                 <button type="submit" class="btn btn-sm btn-warning" data-confirm-message="Unassign {{ member.name }} from companionship?" data-confirm-variant="warning">Unassign</button>
                             </form>
                             {% endif %}
                             <form method="POST" action="{{ url_for('reassign_member', member_id=member.id) }}" style="display:inline-block;" class="me-2">
-                                <select name="new_team_id" class="form-select form-select-sm d-inline-block w-auto me-2" required>
+                                <select name="new_companionship_id" class="form-select form-select-sm d-inline-block w-auto me-2" required>
                                     <option value="">-- Select Companionship --</option>
                                     {% for district in districts %}
                                         <optgroup label="{{ district.name }}">
-                                            {% for team in district.teams %}
-                                                <option value="{{ team.id }}" {% if team.id == member.team_id %}selected{% endif %}>
-                                                    Companionship {{ team.id }}
+                                            {% for companionship in district.companionships %}
+                                                <option value="{{ companionship.id }}" {% if companionship.id == member.companionship_id %}selected{% endif %}>
+                                                    Companionship {{ companionship.id }}
                                                 </option>
                                             {% endfor %}
                                         </optgroup>

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Flask-based web application for scheduling ministering interviews in LDS church wards. The application manages districts, companionships (teams), interview time slots, and automated notifications via email/SMS.
+This is a Flask-based web application for scheduling ministering interviews in LDS church wards. The application manages districts, companionships (companionships), interview time slots, and automated notifications via email/SMS.
 
 Key feature: The app can scrape companionship data from the LDS Church's LCR (Leader and Clerk Resources) website using Selenium to automatically import member information.
 
@@ -50,14 +50,14 @@ python local_scraper.py
 The application uses five core SQLAlchemy models:
 
 1. **District** - Top-level organizational unit with an interviewer
-2. **Team** - Represents a companionship within a district
+2. **Companionship** - Represents a companionship within a district
 3. **Member** - Individual members with unique tokens for scheduling
 4. **InterviewSlot** - Available time slots with capacity limits
 5. **Booking** - Junction table linking members to interview slots
 
 **Important relationships:**
-- District → Teams (one-to-many)
-- Team → Members (one-to-many)
+- District → Companionships (one-to-many)
+- Companionship → Members (one-to-many)
 - InterviewSlot → Bookings (one-to-many with capacity limit)
 - Member tokens are unique 32-character hex strings for secure scheduling links
 
@@ -118,8 +118,8 @@ Optional (for SMS):
 
 ### Booking Logic (app.py:426-452)
 
-Team-based slot restrictions:
-- Once a slot is booked by one member, only their team members can book the same slot
+Companionship-based slot restrictions:
+- Once a slot is booked by one member, only their companionship members can book the same slot
 - This ensures companionships interview together
 - Maximum `max_slots` members per slot (default: 10)
 
@@ -143,7 +143,7 @@ Members can be reassigned between companionships:
 1. Scrape or upload CSV → stores in `progress_store` or session
 2. Confirmation page shows preview grouped by district/companionship
 3. Optional "Clear existing data" checkbox for fresh imports
-4. Import creates/updates districts, teams, and members
+4. Import creates/updates districts, companionships, and members
 5. Members matched by email to prevent duplicates
 
 ## Testing

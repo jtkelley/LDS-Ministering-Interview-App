@@ -27,7 +27,7 @@ This application streamlines the process of scheduling and conducting quarterly 
 
 ### 📆 **Intelligent Scheduling**
 - **Recurring Slot Generation**: Create multiple interview slots across weeks with a single form
-- **Team-Based Restrictions**: Once a slot is booked, only team members can book the same slot
+- **Companionship-Based Restrictions**: Once a slot is booked, only companionship members can book the same slot
 - **Capacity Management**: Set maximum members per slot (default: 10)
 - **Quarter-Based Organization**: Automatically organizes slots by calendar quarters
 - **Conflict Prevention**: Prevents overlapping or duplicate bookings
@@ -51,7 +51,7 @@ This application streamlines the process of scheduling and conducting quarterly 
 ### 📊 **Admin Dashboard**
 - **Calendar View**: Visual overview of all scheduled interviews
 - **District Management**: Organize by districts with assigned interviewers
-- **Companionship View**: See all teams and members at a glance
+- **Companionship View**: See all companionships and members at a glance
 - **Booking Status**: Track who has and hasn't scheduled interviews
 - **Bulk Operations**: Send notifications to all members at once
 
@@ -195,7 +195,7 @@ This application streamlines the process of scheduling and conducting quarterly 
 **Core Models:**
 - `User` - Admin users with authentication
 - `District` - Organizational units with interviewers
-- `Team` - Companionships within districts
+- `Companionship` - Companionships within districts
 - `Member` - Individual members with unique tokens
 - `InterviewSlot` - Available time slots with capacity
 - `Booking` - Junction table linking members to slots
@@ -203,8 +203,8 @@ This application streamlines the process of scheduling and conducting quarterly 
 - `IncomingSMS` - SMS message tracking (Phase 2)
 
 **Key Relationships:**
-- District → Teams (one-to-many)
-- Team → Members (one-to-many)
+- District → Companionships (one-to-many)
+- Companionship → Members (one-to-many)
 - Member → Bookings (one-to-many)
 - InterviewSlot → Bookings (one-to-many with capacity limit)
 
@@ -478,7 +478,7 @@ Contributions are welcome! Since this was built with AI, it's a great opportunit
 - **Anthropic Claude And xAI Grok** - AI assistant that built 99% of this application
 - **The LDS Church** - For the ministering program and LCR system
 - **Flask Community** - For excellent web framework and extensions
-- **Bootstrap Team** - For responsive UI components
+- **Bootstrap Companionship** - For responsive UI components
 - **Open Source Community** - For all the amazing libraries used in this project
 
 ---
