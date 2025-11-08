@@ -128,18 +128,11 @@ def setup_chrome_driver():
     try:
         chromedriver_path = None
 
-        # On Linux (Docker), use system-installed ChromeDriver from /usr/local/bin
+        # On Linux (Docker), use webdriver-manager to auto-download ChromeDriver
         if is_linux:
-            print("🐧 Linux detected - checking for system ChromeDriver")
-            system_chromedriver = shutil.which("chromedriver")
-
-            if system_chromedriver and os.path.exists(system_chromedriver):
-                chromedriver_path = system_chromedriver
-                print(f"✅ Using system ChromeDriver: {chromedriver_path}")
-            else:
-                print("⚠️  System ChromeDriver not found, falling back to webdriver-manager")
-                chromedriver_path = ChromeDriverManager().install()
-                print(f"✅ ChromeDriver installed via webdriver-manager: {chromedriver_path}")
+            print("🐧 Linux detected - using webdriver-manager for ChromeDriver")
+            chromedriver_path = ChromeDriverManager().install()
+            print(f"✅ ChromeDriver installed via webdriver-manager: {chromedriver_path}")
 
         # On Windows, try to use local ChromeDriver first
         elif is_windows:
@@ -155,7 +148,7 @@ def setup_chrome_driver():
             print("🔄 Using webdriver-manager...")
             chromedriver_path = ChromeDriverManager().install()
 
-        print(f"📍 Final ChromeDriver path: {chromedriver_path}")
+        print(f"📍 ChromeDriver path: {chromedriver_path}")
 
         service = Service(chromedriver_path)
 
@@ -426,14 +419,7 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                     companionship_counter += 1
 
             if progress_callback:
-                # Calculate counts for progress display
-                districts = len(set(row['district'] for row in results))
-                companionships = len(set(row['companionship_id'] for row in results))
-                members = len(results)
-                progress_callback(
-                    f"✅ Extracted {members} ministering brothers from JSON",
-                    counts={'districts': districts, 'companionships': companionships, 'members': members}
-                )
+                progress_callback(f"✅ Extracted {len(results)} ministering brothers from JSON")
             json_extraction_success = True
 
         except Exception as e:
@@ -534,14 +520,7 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                         continue
 
                 if progress_callback:
-                    # Calculate counts for progress display
-                    districts = len(set(row['district'] for row in results))
-                    companionships = len(set(row['companionship_id'] for row in results))
-                    members = len(results)
-                    progress_callback(
-                        f"✅ Extracted {members} ministering brothers from table",
-                        counts={'districts': districts, 'companionships': companionships, 'members': members}
-                    )
+                    progress_callback(f"✅ Extracted {len(results)} ministering brothers from table")
 
             except Exception as e:
                 if progress_callback:
@@ -682,14 +661,7 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                     progress_callback(f"[WARN] Could not augment with popups: {e}")
 
         if progress_callback:
-            # Calculate final counts for progress display
-            districts = len(set(row['district'] for row in results))
-            companionships = len(set(row['companionship_id'] for row in results))
-            members = len(results)
-            progress_callback(
-                f"✅ Scraping complete! Extracted {members} ministering brothers",
-                counts={'districts': districts, 'companionships': companionships, 'members': members}
-            )
+            progress_callback(f"✅ Scraping complete! Extracted {len(results)} ministering brothers")
         return results
 
     except Exception as e:

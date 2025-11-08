@@ -58,8 +58,11 @@ instance/*.db
 *.db
 
 # Environment variables
-.env
-.env.*
+# .env is committed for development - contains only dev SECRET_KEY
+# Production uses platform-provided environment variables
+.env.local
+.env.production
+.env.*.local
 
 # Editor backups
 *~
@@ -76,6 +79,9 @@ instance/*.db
 *.pyd
 
 # Ignore common data imports and raw exports
-
 csv/
+
+# Chrome/ChromeDriver temporary files
+chrome_user_data/
+chromedriver_page.html
 

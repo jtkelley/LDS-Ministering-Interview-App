@@ -1144,7 +1144,6 @@ def scrape_data():
                 'message': 'Initializing scraper...',
                 'step': 0,
                 'total_steps': 10,
-                'districts_found': 0,
                 'companionships_found': 0,
                 'members_found': 0,
                 'errors': []
@@ -1155,20 +1154,10 @@ def scrape_data():
                 # Import the scraper module
                 from app_scraper import scrape_ministering_data
 
-                def progress_callback(message, counts=None):
+                def progress_callback(message):
                     # Update progress store with the message
                     with progress_lock:
                         progress_store[progress_id]['message'] = message
-
-                        # Update counts if provided
-                        if counts and isinstance(counts, dict):
-                            if 'districts' in counts:
-                                progress_store[progress_id]['districts_found'] = counts['districts']
-                            if 'companionships' in counts:
-                                progress_store[progress_id]['companionships_found'] = counts['companionships']
-                            if 'members' in counts:
-                                progress_store[progress_id]['members_found'] = counts['members']
-
                         # Try to extract step information from message
                         if 'Step' in message:
                             try:
@@ -1176,7 +1165,7 @@ def scrape_data():
                                 progress_store[progress_id]['step'] = step_num
                             except:
                                 pass
-
+                        
                         # Check if this is an error message and add to errors list
                         if message.startswith('❌') or message.startswith('[ERROR]') or 'Error' in message or 'Failed' in message:
                             progress_store[progress_id]['errors'].append(message)
@@ -1923,7 +1912,6 @@ def import_companionships():
             'message': 'Setting up Chrome browser...',
             'step': 0,
             'total_steps': 8,
-            'districts_found': 0,
             'companionships_found': 0,
             'members_found': 0,
             'errors': []

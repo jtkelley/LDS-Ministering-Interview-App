@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Schedule Interview</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+        .content { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .header { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .companion-notice { background: #e3f2fd; border-left: 4px solid #2196f3; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+        .companion-notice h3 { margin: 0 0 10px 0; color: #1976d2; }
+        .slot-list { list-style: none; padding: 0; }
+        .slot-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .slot-item.companion-slot { border: 3px solid #4caf50; background: #f1f8e9; position: relative; }
+        .slot-item.my-slot { border: 3px solid #2196f3; background: #e3f2fd; position: relative; }
+        .slot-item.companion-slot.my-slot { border: 3px solid #9c27b0; background: #f3e5f5; }
+        .slot-badges { position: absolute; top: -10px; left: 10px; display: flex; gap: 5px; }
+        .slot-badge { color: white; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .companion-badge { background: #4caf50; }
+        .my-badge { background: #2196f3; }
+        .slot-info { flex: 1; }
+        .slot-date { font-size: 18px; font-weight: bold; color: #333; }
+        .slot-time { color: #666; }
+        .slot-capacity { font-size: 14px; color: #999; }
+        button { background: #2196f3; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button:hover { background: #1976d2; }
+        button:disabled { background: #999; cursor: not-allowed; opacity: 0.6; }
+        button.btn-warning { background: #ff9800; }
+        button.btn-warning:hover { background: #f57c00; }
+        .full-badge { background: #f44336; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
+        .alert { border-radius: 8px; }
+        form { margin: 0; }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <div class="header">
+            <h1>Schedule Interview for {{ member.name }}</h1>
+            <p style="color: #666;">District: {{ member.companionship.district.name }}</p>
+        </div>
+
+        {% if my_booking %}
+        <div class="alert alert-success" style="background: #d1e7dd; border-left: 4px solid #0f5132; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+            <h3 style="margin: 0 0 10px 0; color: #0f5132;">✅ You have an interview scheduled!</h3>
+            <p style="margin: 0 0 10px 0;"><strong>Date:</strong> {{ my_booking.slot.date.strftime('%A, %B %d, %Y') }}</p>
+            <p style="margin: 0 0 10px 0;"><strong>Time:</strong> {{ my_booking.slot.start_time.strftime('%I:%M %p') }} ({{ my_booking.slot.duration }} minutes)</p>
+            <form method="POST" action="{{ url_for('unbook_slot', token=member.token) }}" style="margin-top: 10px;">
+                <button type="submit" class="btn btn-warning" data-confirm-message="Are you sure you want to cancel this booking?" data-confirm-variant="warning">
+                    🗑️ Cancel This Booking
+                </button>
+            </form>
+            <p style="margin: 10px 0 0 0; color: #666; font-size: 14px;">If you want to choose a different time, cancel this booking first.</p>
+        </div>
+        {% endif %}
+
+        {% if companion_booking %}
+        <div class="companion-notice">
+            <h3>📢 Your companion has already booked!</h3>
+            <p><strong>{{ companion_booking.companion_name }}</strong> is scheduled for <strong>{{ companion_booking.slot.date.strftime('%A, %B %d, %Y') }}</strong> at <strong>{{ companion_booking.slot.start_time.strftime('%I:%M %p') }}</strong>.</p>
+            <p>You can book the same time slot to interview together (recommended), or choose a different time if needed.</p>
+        </div>
+        {% endif %}
+
+        <h2>Available Time Slots</h2>
+        {% if my_booking %}
+        <p style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+            ℹ️ <strong>Note:</strong> You already have a booking. Cancel it above if you want to choose a different time slot.
+        </p>
+        {% endif %}
+        {% if slots %}
+        <ul class="slot-list">
+        {% for slot in slots %}
+            <li class="slot-item {% if companion_booking and companion_booking.slot.id == slot.id %}companion-slot{% endif %}{% if my_booking and my_booking.slot.id == slot.id %} my-slot{% endif %}">
+                {% if (companion_booking and companion_booking.slot.id == slot.id) or (my_booking and my_booking.slot.id == slot.id) %}
+                <div class="slot-badges">
+                    {% if companion_booking and companion_booking.slot.id == slot.id %}
+                    <span class="slot-badge companion-badge">👥 Companion Booked</span>
+                    {% endif %}
+                    {% if my_booking and my_booking.slot.id == slot.id %}
+                    <span class="slot-badge my-badge">✓ You Booked</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="slot-info">
+                    <div class="slot-date">{{ slot.date.strftime('%A, %B %d, %Y') }}</div>
+                    <div class="slot-time">{{ slot.start_time.strftime('%I:%M %p') }} ({{ slot.duration }} minutes)</div>
+                    <div class="slot-capacity">{{ slot.bookings|length }}/{{ slot.max_slots }} spots filled</div>
+                </div>
+                {% if slot.bookings|length < slot.max_slots %}
+                    <form method="POST" action="{{ url_for('book_slot', slot_id=slot.id, token=member.token) }}">
+                        <button type="submit" {% if my_booking %}disabled{% endif %}>Book This Slot</button>
+                    </form>
+                {% else %}
+                    <span class="full-badge">FULL</span>
+                {% endif %}
+            </li>
+        {% endfor %}
+        </ul>
+        {% else %}
+        <p style="background: white; padding: 20px; border-radius: 8px; text-align: center; color: #666;">No available time slots at this time. Please check back later.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

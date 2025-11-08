@@ -63,8 +63,11 @@ logs/
 *.sqlite
 *.sqlite3
 
-# ChromeDriver downloads (Windows specific)
+# ChromeDriver downloads (Windows specific - not needed in Linux Docker)
 chromedriver/
+chromedriver-win64/
+chrome_user_data/
+chromedriver_page.html
 debug_page.html
 
 # Node modules (if any)
@@ -73,3 +76,10 @@ node_modules/
 # Temporary files
 tmp/
 temp/
+
+# CSV data files
+csv/
+
+# Documentation (not needed in container)
+*.md
+!README.md

@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Slots{% endblock %}
+
+{% block content %}
+        <h1 class="mb-4">Manage Interview Slots for {{ district.name }}</h1>
+        <div class="row">
+            <div class="col-md-6">
+                <h2 class="mb-3">Add New Slot(s)</h2>
+                <p class="mb-3">
+                    Use this form to quickly generate recurring interview slots.<br>
+                    Choose a day of the week, a start time, slot duration, and how many slots you want per day.<br>
+                    Slots will be created for every matching day between your chosen start and end dates.
+                </p>
+                <p class="mb-3 text-muted">
+                    <strong>Examples:</strong>
+                    <ul>
+                        <li>
+                            If you select <b>Monday</b>, set the start time to <b>18:00</b>, duration to <b>30</b> minutes, and number of slots to <b>3</b>:<br>
+                            For each Monday in your date range, slots will be created at 18:00, 18:30, and 19:00.
+                        </li>
+                        <li>
+                            If you select <b>Saturday</b>, start time <b>09:00</b>, duration <b>20</b> minutes, and number of slots <b>5</b>:<br>
+                            For each Saturday in your range, slots will be created at 09:00, 09:20, 09:40, 10:00, and 10:20.
+                        </li>
+                        <li>
+                            <b>Just one day and one slot:</b>  
+                            If you select <b>Wednesday</b>, set the start time to <b>15:00</b>, duration to <b>30</b> minutes, and number of slots to <b>1</b>,<br>and set both the start and end date to the same Wednesday:<br>
+                            Only one slot will be created at 15:00 on that specific day.
+                        </li>
+                        <li>
+                            Slots will <b>not</b> be created if they would overlap with existing slots for the same district and time.
+                        </li>
+                    </ul>
+                </p>
+
+                <form method="POST" class="mb-4">
+                    <div class="mb-3">
+                        <label for="day_of_week" class="form-label">Day of Week:</label>
+                        <select class="form-select" id="day_of_week" name="day_of_week" required>
+                            <option value="0">Monday</option>
+                            <option value="1">Tuesday</option>
+                            <option value="2">Wednesday</option>
+                            <option value="3">Thursday</option>
+                            <option value="4">Friday</option>
+                            <option value="5">Saturday</option>
+                            <option value="6">Sunday</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start_time" class="form-label">Start Time:</label>
+                        <input type="time" class="form-control" id="start_time" name="start_time" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="duration" class="form-label">Duration (minutes):</label>
+                        <input type="number" class="form-control" id="duration" name="duration" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="num_slots" class="form-label">Number of Slots per Day:</label>
+                        <input type="number" class="form-control" id="num_slots" name="num_slots" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="start_date" class="form-label">Start Date:</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ today }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="end_date" class="form-label">End Date:</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ default_end_date }}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Generate Recurring Slots</button>
+                </form>
+            </div>
+            <div class="col-md-6">
+                <h2 class="mb-3">Existing Slots</h2>
+                <div class="mb-3">
+                    <button type="button" class="btn btn-danger me-2" data-bs-toggle="modal" data-bs-target="#deleteModal" data-action="delete_all" onclick="setDeleteModal(this)">Delete All Slots</button>
+                    <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#deleteModal" data-action="delete_selected" onclick="setDeleteModal(this)">Delete Selected</button>
+                </div>
+                <div class="list-group">
+                {% set slots_by_date = {} %}
+                {% for slot in slots %}
+                    {% if slot.date not in slots_by_date %}
+                        {% set _ = slots_by_date.update({slot.date: []}) %}
+                    {% endif %}
+                    {% set _ = slots_by_date[slot.date].append(slot) %}
+                {% endfor %}
+
+                {% set shown_quarters = [] %}
+                {% for date in slots_by_date | sort %}
+                    {% set current_quarter = ((date.month - 1) // 3) + 1 %}
+                    {% set current_year = date.year %}
+                    {% set quarter_key = (current_quarter, current_year) %}
+                    {% if quarter_key not in shown_quarters %}
+                        <h4 class="mt-4 mb-3 text-secondary">Q{{ current_quarter }} {{ current_year }}</h4>
+                        {% set _ = shown_quarters.append(quarter_key) %}
+                    {% endif %}
+                    <div class="mb-3">
+                        <h6 class="text-primary">{{ date.strftime('%A, %B %d, %Y') }}</h6>
+                        {% for slot in slots_by_date[date] %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <input type="checkbox" class="form-check-input me-2" name="slot_ids" value="{{ slot.id }}">
+                                        {{ slot.start_time }} ({{ slot.duration }}min) - Booked: {{ slot.bookings|length }}/10
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal" data-action="delete_slot" data-slot-id="{{ slot.id }}" onclick="setDeleteModal(this)">Delete</button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="deleteModalBody">
+                    Are you sure?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form method="POST" id="deleteForm" style="display:inline;">
+                        <button type="submit" class="btn btn-danger">Delete</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+
+{% block extra_js %}
+    <script>
+        function setDeleteModal(button) {
+            const action = button.getAttribute('data-action');
+            const slotId = button.getAttribute('data-slot-id');
+            const form = document.getElementById('deleteForm');
+            const body = document.getElementById('deleteModalBody');
+            
+            // Clear previous form content
+            form.innerHTML = '<button type="submit" class="btn btn-danger" id="deleteConfirmBtn">Delete</button>';
+            
+            if (action === 'delete_slot') {
+                form.action = "/admin/delete_slot/" + slotId;
+                body.textContent = 'Delete this slot and all its bookings?';
+            } else if (action === 'delete_all') {
+                form.action = "/admin/district/{{ district.id }}/slots";
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'action';
+                hidden.value = 'delete_all';
+                form.appendChild(hidden);
+                body.textContent = 'Delete ALL slots for this district?';
+            } else if (action === 'delete_selected') {
+                form.action = "/admin/district/{{ district.id }}/slots";
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'action';
+                hidden.value = 'delete_selected';
+                form.appendChild(hidden);
+                // Add checked checkboxes
+                const checkboxes = document.querySelectorAll('input[name="slot_ids"]:checked');
+                checkboxes.forEach(cb => {
+                    const hiddenCb = document.createElement('input');
+                    hiddenCb.type = 'hidden';
+                    hiddenCb.name = 'slot_ids';
+                    hiddenCb.value = cb.value;
+                    form.appendChild(hiddenCb);
+                });
+                body.textContent = 'Delete selected slots?';
+            }
+        }
+    </script>
+{% endblock %}

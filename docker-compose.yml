@@ -6,23 +6,17 @@ services:
     ports:
       - "8181:8181"
     volumes:
-      - ./interviews.db:/app/interviews.db
-      - chromedriver-cache:/tmp/.wdm
+      # Mount the instance directory for SQLite database persistence
+      - ./instance:/app/instance
     environment:
-      - FLASK_ENV=production
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
-      - MAIL_USERNAME=${MAIL_USERNAME}
-      - MAIL_PASSWORD=${MAIL_PASSWORD}
-      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
-      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
-      - TWILIO_NUMBER=${TWILIO_NUMBER}
+      # Flask secret key for sessions and database encryption
+      # Uses .env file value or falls back to default
+      - SECRET_KEY=${SECRET_KEY:-dev-local-ministering-interviews-key-not-for-production-use-12345678}
+      # Port for gunicorn to bind to
+      - PORT=8181
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+    # Note: Email/SMS settings are configured via the app UI, not environment variables
+    # They are stored encrypted in the database
 
 volumes:
-  chromedriver-cache:
+  # No volumes needed - instance directory is bind-mounted from host

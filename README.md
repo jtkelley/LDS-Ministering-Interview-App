@@ -86,34 +86,26 @@ This application streamlines the process of scheduling and conducting quarterly 
    cd Ministering-Interviews
    ```
 
-2. **Create a virtual environment (recommended):**
-   ```bash
-   # Windows
-   python -m venv venv
-   venv\Scripts\activate
-
-   # Linux/Mac
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install dependencies:**
+2. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Run the application:**
+3. **Run the application:**
    ```bash
    python app.py
    ```
 
-5. **Access the application:**
+   That's it! The app includes a `.env` file with development settings, so it works immediately.
+
+4. **Access the application:**
    Open your browser to `http://localhost:8181`
 
-6. **Complete setup through the web interface:**
+5. **Complete setup through the web interface:**
    - All configuration (email, SMS, scheduler) is done through the web UI
    - Navigate to **Admin → System Settings** after first login
-   - No environment variables or `.env` file needed!
+
+**Note**: The `.env` file is included in the repository with a development-only SECRET_KEY. When deployed to production (Render, etc.), the platform provides its own secure SECRET_KEY that overrides the development value.
 
 ---
 
