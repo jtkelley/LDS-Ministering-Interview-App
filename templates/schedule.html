@@ -29,6 +29,8 @@
         .full-badge { background: #f44336; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
         .alert { border-radius: 8px; }
         form { margin: 0; }
+        .interview-type-select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer; }
+        .interview-type-select:disabled { background: #f5f5f5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -43,6 +45,7 @@
             <h3 style="margin: 0 0 10px 0; color: #0f5132;">✅ You have an interview scheduled!</h3>
             <p style="margin: 0 0 10px 0;"><strong>Date:</strong> {{ my_booking.slot.date.strftime('%A, %B %d, %Y') }}</p>
             <p style="margin: 0 0 10px 0;"><strong>Time:</strong> {{ my_booking.slot.start_time.strftime('%I:%M %p') }} ({{ my_booking.slot.duration }} minutes)</p>
+            <p style="margin: 0 0 10px 0;"><strong>Type:</strong> {{ my_booking.interview_type|title }}</p>
             <form method="POST" action="{{ url_for('unbook_slot', token=member.token) }}" style="margin-top: 10px;">
                 <button type="submit" class="btn btn-warning" data-confirm-message="Are you sure you want to cancel this booking?" data-confirm-variant="warning">
                     🗑️ Cancel This Booking
@@ -86,7 +89,11 @@
                     <div class="slot-capacity">{{ slot.bookings|length }}/{{ slot.max_slots }} spots filled</div>
                 </div>
                 {% if slot.bookings|length < slot.max_slots %}
-                    <form method="POST" action="{{ url_for('book_slot', slot_id=slot.id, token=member.token) }}">
+                    <form method="POST" action="{{ url_for('book_slot', slot_id=slot.id, token=member.token) }}" style="display: flex; gap: 10px; align-items: center;">
+                        <select name="interview_type" class="interview-type-select" {% if my_booking %}disabled{% endif %}>
+                            <option value="in-person">In-Person</option>
+                            <option value="phone">Phone</option>
+                        </select>
                         <button type="submit" {% if my_booking %}disabled{% endif %}>Book This Slot</button>
                     </form>
                 {% else %}

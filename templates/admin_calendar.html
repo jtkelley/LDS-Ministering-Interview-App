@@ -116,7 +116,13 @@
                                             <ul class="list-unstyled mt-1 mb-1 small">
                                             {% for booking in slot.bookings %}
                                                 <li class="d-flex justify-content-between align-items-center">
-                                                    <span>{{ booking.member.name }} {% if booking.member.phone %}{{ booking.member.phone }}{% endif %}</span>
+                                                    <span>
+                                                        <strong>{{ booking.member.name }}</strong>
+                                                        {% if booking.member.phone %}
+                                                            - {{ booking.member.phone }}
+                                                        {% endif %}
+                                                        <span class="badge bg-secondary ms-2">{{ booking.interview_type|default('in-person')|title }}</span>
+                                                    </span>
                                                     <form method="POST" action="{{ url_for('remove_booking', booking_id=booking.id) }}" style="display:inline;">
                                                         <button type="submit" class="btn btn-sm btn-outline-danger btn-close" data-confirm-message="Remove {{ booking.member.name }}?" data-confirm-variant="danger" aria-label="Remove"></button>
                                                     </form>
@@ -128,8 +134,8 @@
                                             {% set booked_ids = slot.bookings|map(attribute='member_id')|list %}
                                             {% set allowed_companionship = slot.bookings[0].member.companionship if slot.bookings else None %}
                                             <form method="POST" action="{{ url_for('add_booking', slot_id=slot.id) }}" class="mt-1">
-                                                <div class="input-group input-group-sm">
-                                                    <select name="member_id" class="form-select select2" style="flex: 1;">
+                                                <div class="d-flex gap-2 mb-1">
+                                                    <select name="member_id" class="form-select form-select-sm select2" style="flex: 1;">
                                                         <option value="">Add member...</option>
                                                         {% if allowed_companionship %}
                                                             {% for member in allowed_companionship.members %}
@@ -146,6 +152,10 @@
                                                                 {% endfor %}
                                                             {% endfor %}
                                                         {% endif %}
+                                                    </select>
+                                                    <select name="interview_type" class="form-select form-select-sm" style="flex: 0 0 auto; width: 110px;">
+                                                        <option value="in-person">In-Person</option>
+                                                        <option value="phone">Phone</option>
                                                     </select>
                                                     <button type="submit" class="btn btn-primary btn-sm">Add</button>
                                                 </div>

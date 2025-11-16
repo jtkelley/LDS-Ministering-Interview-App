@@ -5,7 +5,7 @@
 {% block content %}
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>Notification Report</h1>
-        <a href="{{ url_for('admin') }}" class="btn btn-secondary">Back to Dashboard</a>
+        <a href="{{ url_for('admin.admin') }}" class="btn btn-secondary">Back to Dashboard</a>
     </div>
 
     <!-- Quarter Selector and Filters -->
@@ -40,6 +40,11 @@
                                {% if request.args.get('no_booking') == 'on' %}checked{% endif %} onchange="this.form.submit()">
                         <label class="btn btn-outline-primary" for="no_booking">No Booking</label>
                     </div>
+                </div>
+
+                <div class="col-auto">
+                    <label for="memberSearch" class="form-label">Search Member:</label>
+                    <input type="text" id="memberSearch" class="form-control" placeholder="Type name to filter...">
                 </div>
 
                 {% if request.args.get('not_sent') or request.args.get('sent') or request.args.get('no_booking') %}
@@ -277,6 +282,47 @@ document.getElementById('quarter').addEventListener('change', function() {
     const selectedOption = this.options[this.selectedIndex];
     const year = selectedOption.getAttribute('data-year');
     document.getElementById('year').value = year;
+});
+
+// Member search functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('memberSearch');
+    const tableRows = document.querySelectorAll('.table tbody tr');
+
+    searchInput.addEventListener('input', function() {
+        const searchTerm = this.value.toLowerCase().trim();
+        let visibleCount = 0;
+
+        tableRows.forEach(row => {
+            // Skip the "no members found" row
+            if (row.querySelector('td[colspan]')) return;
+
+            // Get member name from the third column (index 2)
+            const memberNameCell = row.cells[2];
+            if (!memberNameCell) return;
+
+            const memberName = memberNameCell.textContent.toLowerCase();
+
+            if (searchTerm === '' || memberName.includes(searchTerm)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Update the badge count with filtered results
+        const badge = document.querySelector('.card-header .badge');
+        if (badge && searchTerm !== '') {
+            const originalText = badge.dataset.originalText || badge.textContent;
+            if (!badge.dataset.originalText) {
+                badge.dataset.originalText = originalText;
+            }
+            badge.textContent = `Showing ${visibleCount} of ${tableRows.length} members (filtered)`;
+        } else if (badge && badge.dataset.originalText) {
+            badge.textContent = badge.dataset.originalText;
+        }
+    });
 });
 
 // Copy link to clipboard functionality
