@@ -1,4 +1,4 @@
-name: ministering-interviews
+name: lehi7th   # REPLACE with your ward name. used for subdomain: <name>.ondigitalocean.app 
 region: nyc
 
 services:

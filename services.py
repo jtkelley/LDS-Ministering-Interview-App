@@ -63,6 +63,19 @@ def apply_sms_config():
                 from twilio.rest import Client
                 sms_config['provider'] = 'twilio'
                 sms_config['client'] = Client(account_sid, auth_token)
+
+                # Ensure phone number is in E.164 format (+1XXXXXXXXXX)
+                if not phone_number.startswith('+'):
+                    # Remove any non-digit characters
+                    digits_only = ''.join(filter(str.isdigit, phone_number))
+                    # Add +1 for US/Canada if not present
+                    if len(digits_only) == 10:
+                        phone_number = '+1' + digits_only
+                    elif len(digits_only) == 11 and digits_only.startswith('1'):
+                        phone_number = '+' + digits_only
+                    else:
+                        phone_number = '+' + digits_only
+
                 sms_config['from_number'] = phone_number
                 return True
 
@@ -92,7 +105,37 @@ def apply_sms_config():
             if project_id and auth_token and space_url and phone_number:
                 from signalwire.rest import Client as SignalWireClient
                 sms_config['provider'] = 'signalwire'
-                sms_config['client'] = SignalWireClient(project_id, auth_token, signalwire_space_url=space_url)
+
+                # Ensure space_url doesn't have https:// prefix (SignalWire client adds it)
+                if space_url.startswith('https://'):
+                    space_url = space_url.replace('https://', '')
+                elif space_url.startswith('http://'):
+                    space_url = space_url.replace('http://', '')
+
+                print(f"Initializing SignalWire client:")
+                print(f"  Project ID: {project_id[:8]}...")
+                print(f"  Auth Token: {auth_token[:8]}...")
+                print(f"  Space URL: {space_url}")
+
+                try:
+                    sms_config['client'] = SignalWireClient(project_id, auth_token, signalwire_space_url=space_url)
+                    print(f"  ✓ SignalWire client initialized successfully")
+                except Exception as init_error:
+                    print(f"  ✗ Failed to initialize SignalWire client: {init_error}")
+                    raise
+
+                # Ensure phone number is in E.164 format (+1XXXXXXXXXX)
+                if not phone_number.startswith('+'):
+                    # Remove any non-digit characters
+                    digits_only = ''.join(filter(str.isdigit, phone_number))
+                    # Add +1 for US/Canada if not present
+                    if len(digits_only) == 10:
+                        phone_number = '+1' + digits_only
+                    elif len(digits_only) == 11 and digits_only.startswith('1'):
+                        phone_number = '+' + digits_only
+                    else:
+                        phone_number = '+' + digits_only
+
                 sms_config['from_number'] = phone_number
                 return True
 

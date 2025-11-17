@@ -1641,10 +1641,49 @@ def system_settings():
     config = SystemConfig.query.first()
     if not config:
         config = SystemConfig()
+        # Create a decrypted view for template
+        decrypted = {
+            'mail_server': 'localhost',
+            'mail_port': 1025,
+            'mail_use_tls': False,
+            'mail_username': '',
+            'mail_password': '',
+            'mail_from_email': '',
+            'mail_from_name': 'Ministering Interview App',
+            'sms_provider': 'twilio',
+            'twilio_account_sid': '',
+            'twilio_auth_token': '',
+            'twilio_phone_number': '',
+            'aws_access_key_id': '',
+            'aws_secret_access_key': '',
+            'aws_region': '',
+            'aws_sns_sender_id': '',
+            'signalwire_project_id': '',
+            'signalwire_auth_token': '',
+            'signalwire_space_url': '',
+            'signalwire_phone_number': '',
+            'reminder_enabled': True,
+            'reminder_day_of_week': 0,
+            'reminder_hour': 9,
+            'reminder_minute': 0,
+            'sms_mode': 'one_way',
+            'sms_contact_enabled': True,
+            'sms_contact_name': '',
+            'sms_contact_phone': ''
+        }
     else:
-        config.decrypt_fields()
+        # Get decrypted fields as dictionary
+        decrypted = config.decrypt_fields()
 
-    return render_template('system_settings.html', config=config)
+    # Create a simple object to hold decrypted values for template
+    class DecryptedConfig:
+        pass
+
+    config_view = DecryptedConfig()
+    for key, value in decrypted.items():
+        setattr(config_view, key, value)
+
+    return render_template('system_settings.html', config=config_view)
 
 
 @admin_bp.route('/settings/save', methods=['POST'])
@@ -1706,6 +1745,13 @@ def save_system_settings():
         config.encrypt_fields()
         db.session.add(config)
         db.session.commit()
+
+        # Immediately reload email/SMS config into Flask app after saving
+        if config_type == 'email':
+            services.apply_email_config()
+        elif config_type == 'sms':
+            services.apply_sms_config()
+
         flash(f'{config_type.capitalize()} settings saved successfully!', 'success')
     except Exception as e:
         db.session.rollback()
@@ -1780,11 +1826,25 @@ def send_test_sms():
             result = services.sms_config['client'].publish(**params)
             flash(f'Test SMS sent successfully to {test_phone}!', 'success')
         elif services.sms_config['provider'] == 'signalwire':
-            result = services.sms_config['client'].messages.create(
-                body=test_message, from_=services.sms_config['from_number'], to=test_phone)
-            flash(f'Test SMS sent successfully to {test_phone}!', 'success')
+            try:
+                print(f"SignalWire - Sending SMS from {services.sms_config['from_number']} to {test_phone}")
+                result = services.sms_config['client'].messages.create(
+                    body=test_message,
+                    from_=services.sms_config['from_number'],
+                    to=test_phone
+                )
+                flash(f'Test SMS sent successfully to {test_phone}! SID: {result.sid}', 'success')
+            except Exception as sw_error:
+                print(f"SignalWire error details: {sw_error}")
+                import traceback
+                traceback.print_exc()
+                raise  # Re-raise to be caught by outer exception handler
     except Exception as e:
-        flash(f'Failed to send test SMS: {str(e)}', 'error')
+        error_msg = str(e)
+        # Add more context for common errors
+        if "Expecting value" in error_msg:
+            error_msg = f"SignalWire API returned invalid response. Check: 1) Space URL is correct 2) Project ID and Auth Token are valid 3) Phone number format is correct. Original error: {error_msg}"
+        flash(f'Failed to send test SMS: {error_msg}', 'error')
 
     return redirect(url_for('admin.system_settings') + '#sms')
 
