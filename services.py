@@ -16,6 +16,7 @@ sms_config = {
 def apply_email_config():
     """Load email config from database and apply to Flask app config"""
     from models import SystemConfig
+    from shared import mail
 
     try:
         config = SystemConfig.query.first()
@@ -27,9 +28,16 @@ def apply_email_config():
             current_app.config['MAIL_USERNAME'] = decrypted['mail_username']
             current_app.config['MAIL_PASSWORD'] = decrypted['mail_password']
             current_app.config['MAIL_DEFAULT_SENDER'] = decrypted['mail_from_email']
+
+            # Reinitialize mail with new config
+            mail.init_app(current_app)
+
+            print(f"Email configured: {decrypted['mail_server']}:{decrypted['mail_port']} (TLS: {decrypted['mail_use_tls']})")
             return decrypted['mail_from_email']
     except Exception as e:
         print(f"Error loading email config: {e}")
+        import traceback
+        traceback.print_exc()
     return None
 
 
@@ -168,9 +176,14 @@ def send_sms(to_number, message):
     return False
 
 
-def reschedule_reminder_job(config, scheduler):
+def reschedule_reminder_job(config, scheduler=None):
     """Reschedule the reminder job based on config settings"""
     from apscheduler.triggers.cron import CronTrigger
+
+    # Get scheduler from app if not provided
+    if scheduler is None:
+        from flask import current_app
+        scheduler = current_app.scheduler
 
     try:
         # Remove existing job if it exists
@@ -244,7 +257,7 @@ def send_booking_reminders():
             errors = []
 
             for member in members_without_bookings:
-                link = url_for('member.schedule', token=member.token, _external=True)
+                link = url_for('schedule', token=member.token, _external=True)
 
                 # Send email
                 if member.email:

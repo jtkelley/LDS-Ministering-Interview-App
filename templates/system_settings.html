@@ -23,7 +23,7 @@
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title mb-4">Email Server Configuration</h5>
-                        <form method="POST" action="{{ url_for('save_system_settings') }}">
+                        <form method="POST" action="{{ url_for('admin.save_system_settings') }}">
                             <input type="hidden" name="config_type" value="email">
                             
                             <div class="row">
@@ -83,7 +83,7 @@
                             
                             <div class="mb-3">
                                 <button type="submit" class="btn btn-primary">💾 Save Email Settings</button>
-                                <a href="{{ url_for('send_test_email') }}" class="btn btn-secondary">✉️ Send Test Email</a>
+                                <a href="{{ url_for('admin.send_test_email') }}" class="btn btn-secondary">✉️ Send Test Email</a>
                             </div>
                         </form>
                     </div>
@@ -95,7 +95,7 @@
                 <div class="card">
                     <div class="card-body">
                         <h5 class="card-title mb-4">SMS Configuration</h5>
-                        <form method="POST" action="{{ url_for('save_system_settings') }}" id="sms-form">
+                        <form method="POST" action="{{ url_for('admin.save_system_settings') }}" id="sms-form">
                             <input type="hidden" name="config_type" value="sms">
 
                             <!-- SMS Mode Selection -->
@@ -565,7 +565,7 @@
                                 <p class="text-muted small mb-3">
                                     Send a test message to verify your SMS configuration and see how the formatted message will appear.
                                 </p>
-                                <form method="POST" action="{{ url_for('send_test_sms') }}" class="row g-3">
+                                <form method="POST" action="{{ url_for('admin.send_test_sms') }}" class="row g-3">
                                     <div class="col-md-8">
                                         <label for="test_phone_number" class="form-label">Phone Number</label>
                                         <input type="tel" class="form-control" id="test_phone_number" name="test_phone_number"
@@ -584,7 +584,7 @@
 
             <!-- Scheduler Settings Tab -->
             <div class="tab-pane fade" id="scheduler" role="tabpanel">
-                <form method="POST" action="{{ url_for('save_system_settings') }}">
+                <form method="POST" action="{{ url_for('admin.save_system_settings') }}">
                     <input type="hidden" name="config_type" value="scheduler">
 
                     <div class="form-check form-switch mb-4">

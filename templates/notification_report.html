@@ -49,7 +49,7 @@
 
                 {% if request.args.get('not_sent') or request.args.get('sent') or request.args.get('no_booking') %}
                 <div class="col-auto">
-                    <a href="{{ url_for('notification_report', quarter=selected_quarter, year=selected_year) }}" class="btn btn-secondary">
+                    <a href="{{ url_for('admin.notification_report', quarter=selected_quarter, year=selected_year) }}" class="btn btn-secondary">
                         Clear Filters
                     </a>
                 </div>
@@ -209,7 +209,7 @@
                                     <td class="text-center">
                                         <div class="btn-group-vertical btn-group-sm" role="group">
                                             <button class="btn btn-sm btn-outline-secondary copy-link-btn"
-                                                    data-link="{{ url_for('schedule', token=data.member.token, _external=True) }}"
+                                                    data-link="{{ url_for('public.schedule', token=data.member.token, _external=True) }}"
                                                     data-member-name="{{ data.member.name }}"
                                                     title="Copy scheduling link to clipboard">
                                                 📋 Copy Link

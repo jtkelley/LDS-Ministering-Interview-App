@@ -40,13 +40,31 @@
             <p style="color: #666;">District: {{ member.companionship.district.name }}</p>
         </div>
 
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}" style="
+                        padding: 15px;
+                        margin-bottom: 20px;
+                        border-radius: 8px;
+                        {% if category == 'success' %}background: #d1e7dd; border-left: 4px solid #0f5132; color: #0f5132;{% endif %}
+                        {% if category == 'error' or category == 'danger' %}background: #f8d7da; border-left: 4px solid #842029; color: #842029;{% endif %}
+                        {% if category == 'warning' %}background: #fff3cd; border-left: 4px solid #ffc107; color: #664d03;{% endif %}
+                        {% if category == 'info' %}background: #cfe2ff; border-left: 4px solid #084298; color: #084298;{% endif %}
+                    ">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         {% if my_booking %}
         <div class="alert alert-success" style="background: #d1e7dd; border-left: 4px solid #0f5132; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
             <h3 style="margin: 0 0 10px 0; color: #0f5132;">✅ You have an interview scheduled!</h3>
             <p style="margin: 0 0 10px 0;"><strong>Date:</strong> {{ my_booking.slot.date.strftime('%A, %B %d, %Y') }}</p>
             <p style="margin: 0 0 10px 0;"><strong>Time:</strong> {{ my_booking.slot.start_time.strftime('%I:%M %p') }} ({{ my_booking.slot.duration }} minutes)</p>
             <p style="margin: 0 0 10px 0;"><strong>Type:</strong> {{ my_booking.interview_type|title }}</p>
-            <form method="POST" action="{{ url_for('unbook_slot', token=member.token) }}" style="margin-top: 10px;">
+            <form method="POST" action="{{ url_for('public.unbook_slot', token=member.token) }}" style="margin-top: 10px;">
                 <button type="submit" class="btn btn-warning" data-confirm-message="Are you sure you want to cancel this booking?" data-confirm-variant="warning">
                     🗑️ Cancel This Booking
                 </button>
@@ -89,7 +107,7 @@
                     <div class="slot-capacity">{{ slot.bookings|length }}/{{ slot.max_slots }} spots filled</div>
                 </div>
                 {% if slot.bookings|length < slot.max_slots %}
-                    <form method="POST" action="{{ url_for('book_slot', slot_id=slot.id, token=member.token) }}" style="display: flex; gap: 10px; align-items: center;">
+                    <form method="POST" action="{{ url_for('public.book_slot', slot_id=slot.id, token=member.token) }}" style="display: flex; gap: 10px; align-items: center;">
                         <select name="interview_type" class="interview-type-select" {% if my_booking %}disabled{% endif %}>
                             <option value="in-person">In-Person</option>
                             <option value="phone">Phone</option>

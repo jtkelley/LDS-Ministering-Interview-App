@@ -19,14 +19,22 @@ class Config:
     def get_database_uri():
         """Get database URI based on environment"""
         database_url = os.environ.get('DATABASE_URL', '')
-        # Only use DATABASE_URL if it's for production (Render/Heroku)
-        if database_url and ('render.com' in database_url or 'herokuapp.com' in database_url):
+
+        # Use DATABASE_URL if it's for production (Render/Heroku/DigitalOcean)
+        if database_url and any(domain in database_url for domain in
+            ['render.com', 'herokuapp.com', 'digitalocean.com', 'ondigitalocean.app']):
             return database_url
-        else:
-            # Local development: always use SQLite with absolute path
-            basedir = os.path.abspath(os.path.dirname(__file__))
-            db_path = os.path.join(basedir, 'instance', 'interviews.db')
+
+        # Check if running in DO App Platform with persistent disk
+        if os.path.exists('/data'):
+            # Use persistent disk for SQLite on DigitalOcean
+            db_path = '/data/interviews.db'
             return f'sqlite:///{db_path}'
+
+        # Local development: use SQLite with absolute path
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        db_path = os.path.join(basedir, 'instance', 'interviews.db')
+        return f'sqlite:///{db_path}'
 
     SQLALCHEMY_DATABASE_URI = get_database_uri.__func__()
     SQLALCHEMY_TRACK_MODIFICATIONS = False

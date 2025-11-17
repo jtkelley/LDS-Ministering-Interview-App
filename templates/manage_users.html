@@ -7,8 +7,8 @@
         
         <div class="row mb-4">
             <div class="col-md-6">
-                <a href="{{ url_for('invite_user') }}" class="btn btn-primary me-2">Send User Invitation</a>
-                <a href="{{ url_for('create_user') }}" class="btn btn-success">Create User Directly</a>
+                <a href="{{ url_for('admin.invite_user') }}" class="btn btn-primary me-2">Send User Invitation</a>
+                <a href="{{ url_for('admin.create_user') }}" class="btn btn-success">Create User Directly</a>
             </div>
         </div>
 
@@ -53,8 +53,8 @@
                                     </td>
                                     <td>
                                         {% if user.id != current_user.id %}
-                                            <a href="{{ url_for('edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
-                                            <form method="POST" action="{{ url_for('delete_user', user_id=user.id) }}" style="display:inline;">
+                                            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                                            <form method="POST" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display:inline;">
                                                 <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Delete {{ user.email }}? This cannot be undone." data-confirm-variant="danger">Delete</button>
                                             </form>
                                         {% else %}
@@ -113,7 +113,7 @@
                                         {% if inviter %}{{ inviter.email }}{% else %}Unknown{% endif %}
                                     </td>
                                     <td>
-                                        <form method="POST" action="{{ url_for('cancel_invitation', invitation_id=invitation.id) }}" style="display:inline;">
+                                        <form method="POST" action="{{ url_for('admin.cancel_invitation', invitation_id=invitation.id) }}" style="display:inline;">
                                             <button type="submit" class="btn btn-sm btn-outline-warning" data-confirm-message="Cancel invitation for {{ invitation.email }}?" data-confirm-variant="warning">Cancel</button>
                                         </form>
                                     </td>

@@ -23,7 +23,7 @@
                 <h4>Scraping Failed</h4>
                 <p>Errors: <span id="error-list"></span></p>
             </div>
-            <a href="{{ url_for('scrape_data') }}" class="btn btn-primary">Try Again</a>
+            <a href="{{ url_for('admin.scrape_data') }}" class="btn btn-primary">Try Again</a>
         </div>
         
         <div id="import-section" style="display: none;">
@@ -33,7 +33,7 @@
             <a href="/admin/download_csv/{{ progress_id }}" class="btn btn-info ms-2">Download CSV</a>
         </div>
 
-    <a href="{{ url_for('manage_districts') }}" class="btn btn-secondary mt-3">Back to Admin</a>
+    <a href="{{ url_for('admin.manage_districts') }}" class="btn btn-secondary mt-3">Back to Admin</a>
 {% endblock %}
 
 {% block extra_js %}
@@ -96,6 +96,16 @@
                     // Stop polling
                     if (progressInterval) clearInterval(progressInterval);
                     if (progressBarInterval) clearInterval(progressBarInterval);
+
+                    // Populate error list
+                    const errorList = document.getElementById('error-list');
+                    if (data.errors && data.errors.length > 0) {
+                        errorList.innerHTML = '<ul class="mb-0">' + data.errors.map(e => '<li>' + e + '</li>').join('') + '</ul>';
+                    } else if (data.message) {
+                        errorList.textContent = data.message;
+                    } else {
+                        errorList.textContent = 'Unknown error occurred';
+                    }
 
                     document.getElementById('progress-section').style.display = 'none';
                     document.getElementById('error-section').style.display = 'block';

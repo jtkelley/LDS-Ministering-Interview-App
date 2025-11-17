@@ -91,7 +91,7 @@ class SystemConfig(db.Model):
 
     def encrypt_fields(self):
         """Encrypt sensitive fields before saving"""
-        from utils.encryption import EncryptionHelper
+        from utils import EncryptionHelper
 
         if self.mail_username:
             self.mail_username = EncryptionHelper.encrypt(self.mail_username)
@@ -112,7 +112,7 @@ class SystemConfig(db.Model):
 
     def decrypt_fields(self):
         """Decrypt sensitive fields when retrieving"""
-        from utils.encryption import EncryptionHelper
+        from utils import EncryptionHelper
 
         return {
             'mail_server': self.mail_server,

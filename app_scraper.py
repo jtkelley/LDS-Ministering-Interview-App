@@ -344,12 +344,40 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                 progress_callback("❌ Verify button not clickable or not enabled")
             return None
 
+        # Check for invalid credentials error
+        if progress_callback:
+            progress_callback("📍 Checking for login errors...")
+        try:
+            # Wait a bit for error message to appear if credentials are wrong
+            time.sleep(2)
+
+            # Check for the specific error message
+            error_element = driver.find_element(By.ID, "password-error-text")
+            if error_element and "Invalid username and password combination" in error_element.text:
+                if progress_callback:
+                    progress_callback("❌ Invalid username and password combination. Please check your credentials.")
+                return None
+        except:
+            # No error found, continue
+            pass
+
+        # Also check for error in page source as backup
+        if "Invalid username and password combination" in driver.page_source:
+            if progress_callback:
+                progress_callback("❌ Invalid username and password combination. Please check your credentials.")
+            return None
+
         # Step 6: Wait for ministering page to load
         if progress_callback:
             progress_callback("📍 Step 6: Waiting for ministering page to load...")
-        WebDriverWait(driver, 30).until(
-            lambda driver: "ministering" in driver.current_url.lower() or "companionship" in driver.page_source.lower()
-        )
+        try:
+            WebDriverWait(driver, 30).until(
+                lambda driver: "ministering" in driver.current_url.lower() or "companionship" in driver.page_source.lower()
+            )
+        except TimeoutException:
+            if progress_callback:
+                progress_callback("❌ Timeout waiting for ministering page. Login may have failed.")
+            return None
         if progress_callback:
             progress_callback("✅ Ministering page loaded successfully")
 

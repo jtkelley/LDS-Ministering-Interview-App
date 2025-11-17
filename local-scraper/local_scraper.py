@@ -8,6 +8,11 @@ Runs with visible Chrome browser for interactive debugging.
 # LCR_USERNAME = os.environ.get('LCR_USERNAME')
 # LCR_PASSWORD = os.environ.get('LCR_PASSWORD')
 
+# LCR_USERNAME = some_username
+# LCR_PASSWORD = some_password
+
+
+
 import os
 import time
 import shutil
