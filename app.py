@@ -95,8 +95,10 @@ def check_user_validity():
 # Register Blueprints
 from routes_public import public_bp
 from routes_admin import admin_bp
+from routes_api import api_bp
 app.register_blueprint(public_bp)
 app.register_blueprint(admin_bp)
+app.register_blueprint(api_bp)
 
 # Initialize database and load config
 with app.app_context():

@@ -85,3 +85,13 @@ csv/
 chrome_user_data/
 chromedriver_page.html
 
+# SSH keys
+*.key
+*.pem
+id_rsa
+id_ed25519
+*.pub
+
+# Oracle Cloud deployment config (contains secrets)
+oracle_config.yaml
+

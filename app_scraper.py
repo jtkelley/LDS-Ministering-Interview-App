@@ -84,9 +84,36 @@ def download_chromedriver_manual():
         return None
 
 def setup_chrome_driver():
-    """Set up Chrome driver with platform detection (Windows/Linux)."""
+    """Set up Chrome driver with platform detection (Windows/Linux) or Remote Selenium."""
     print("🔍 [DEBUG] setup_chrome_driver called")
 
+    # Check for remote Selenium URL (Docker/Oracle Cloud deployment)
+    selenium_url = os.environ.get('SELENIUM_URL')
+
+    if selenium_url:
+        print(f"🌐 Using remote Selenium at: {selenium_url}")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-images")
+        chrome_options.add_argument("--disable-extensions")
+
+        try:
+            driver = webdriver.Remote(
+                command_executor=selenium_url,
+                options=chrome_options
+            )
+            print("✅ Remote Chrome driver initialized successfully")
+            time.sleep(2)
+            return driver
+        except Exception as e:
+            print(f"❌ Failed to connect to remote Selenium: {e}")
+            raise Exception(f"Could not connect to Selenium at {selenium_url}: {e}")
+
+    # Local Chrome setup (Windows/Linux without SELENIUM_URL)
     # Detect platform
     import platform
     is_windows = platform.system() == 'Windows'
