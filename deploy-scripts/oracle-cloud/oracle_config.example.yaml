@@ -34,8 +34,8 @@ git:
 
 # Application Settings
 app:
-  # Port to run the application on
-  port: 8181
+  # Port to expose externally (mapped to internal 8181)
+  port: 80
 
   # Secret key for Flask sessions (leave empty to auto-generate)
   secret_key: ""
