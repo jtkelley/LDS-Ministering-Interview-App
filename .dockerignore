@@ -83,3 +83,13 @@ csv/
 # Documentation (not needed in container)
 *.md
 !README.md
+
+# Backup and test files (not needed in container)
+*_backup.py
+test_*.py
+local_scraper.py
+app_with_*.py
+routes_settings.py
+routes_member.py
+utils_standalone_backup.py
+admin_routes_extracted.txt

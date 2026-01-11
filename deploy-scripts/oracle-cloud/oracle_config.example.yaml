@@ -1,0 +1,56 @@
+# Oracle Cloud Deployment Configuration
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to oracle_config.yaml:
+#    cp oracle_config.example.yaml oracle_config.yaml
+#
+# 2. Fill in your values (or leave empty to be prompted during deployment)
+#
+# 3. Run the deployment script:
+#    python deploy_oracle.py
+#
+# NOTE: oracle_config.yaml is gitignored to protect your secrets
+
+# Oracle Cloud VM Connection
+oracle:
+  # Public IP address of your Oracle Cloud VM
+  # Find this in: Compute -> Instances -> your instance -> Public IP
+  vm_ip: ""
+
+  # SSH username (usually "opc" for Oracle Linux)
+  ssh_user: "opc"
+
+  # Path to your SSH private key file
+  # Example: ~/.ssh/id_rsa or ./ssh-key-2026-01-11.key
+  ssh_key_path: ""
+
+# Git Repository
+git:
+  # Repository URL to clone on the server
+  repo_url: "https://github.com/YOUR_USERNAME/Ministering-Interviews.git"
+
+  # Branch to deploy
+  branch: "main"
+
+# Application Settings
+app:
+  # Port to run the application on
+  port: 8181
+
+  # Secret key for Flask sessions (leave empty to auto-generate)
+  secret_key: ""
+
+  # Application directory on the server
+  app_dir: "/home/opc/Ministering-Interviews"
+
+# Deployment Options
+deploy:
+  # Install Docker if not present
+  install_docker: true
+
+  # Open firewall port
+  configure_firewall: true
+
+  # Add swap space (recommended for 1GB RAM VMs)
+  add_swap: true
+  swap_size_mb: 1024

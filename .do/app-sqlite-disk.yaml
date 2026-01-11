@@ -1,0 +1,70 @@
+name: lehi7th   # REPLACE with your ward name. used for subdomain: <name>.ondigitalocean.app 
+region: nyc
+
+services:
+- name: web
+  # Use Dockerfile for build (includes Chrome/ChromeDriver)
+  dockerfile_path: Dockerfile
+
+  github:
+    repo: your-username/ministering-interviews  # REPLACE with your actual GitHub repo
+    branch: main
+    deploy_on_push: true
+
+  # Use gunicorn for production
+  run_command: gunicorn --bind 0.0.0.0:8080 --workers 2 --timeout 120 app:app
+
+  http_port: 8080
+
+  instance_count: 1
+  instance_size_slug: basic-xxs  # $5/mo - upgrade to basic-xs ($12/mo) for better performance
+
+  # Environment variables
+  envs:
+  - key: FLASK_ENV
+    value: production
+
+  - key: SECRET_KEY
+    scope: RUN_AND_BUILD_TIME
+    type: SECRET
+    # Set this in DO dashboard - use: python -c "import secrets; print(secrets.token_hex(32))"
+
+  # Force SQLite usage by NOT setting DATABASE_URL
+  # The app will automatically use SQLite at /data/interviews.db
+
+  - key: MAIL_USERNAME
+    scope: RUN_TIME
+    type: SECRET
+    # Your SMTP email address
+
+  - key: MAIL_PASSWORD
+    scope: RUN_TIME
+    type: SECRET
+    # Your SMTP app password
+
+  # Optional: SMS provider credentials (configure based on your provider)
+  # Twilio example:
+  # - key: TWILIO_ACCOUNT_SID
+  #   scope: RUN_TIME
+  #   type: SECRET
+  # - key: TWILIO_AUTH_TOKEN
+  #   scope: RUN_TIME
+  #   type: SECRET
+  # - key: TWILIO_PHONE_NUMBER
+  #   scope: RUN_TIME
+  #   type: SECRET
+
+  health_check:
+    http_path: /
+    initial_delay_seconds: 10
+    period_seconds: 10
+    timeout_seconds: 5
+    success_threshold: 1
+    failure_threshold: 3
+
+  # Persistent disk for SQLite database
+  # WARNING: Only works with instance_count: 1 (no horizontal scaling)
+  storage:
+  - name: interviews-data
+    path: /data
+    size_gb: 5  # Free tier includes 5GB

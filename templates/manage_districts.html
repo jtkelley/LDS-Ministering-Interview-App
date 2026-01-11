@@ -4,13 +4,21 @@
 
 {% block content %}
         <h1 class="mb-4">Manage Districts</h1>
-        <a href="{{ url_for('new_district') }}" class="btn btn-primary mb-3">Create New District</a>
+        <a href="{{ url_for('admin.new_district') }}" class="btn btn-primary mb-3">Create New District</a>
         
         <h2>Districts</h2>
         <ul class="list-group">
         {% for district in districts %}
-            <li class="list-group-item"><a href="{{ url_for('district_detail', id=district.id) }}">{{ district.name }} - {{ district.interviewer_name }}</a></li>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('admin.district_detail', id=district.id) }}">{{ district.name }} - {{ district.interviewer_name }}</a>
+                <div>
+                    <a href="{{ url_for('admin.district_detail', id=district.id) }}" class="btn btn-sm btn-outline-primary me-2">Manage</a>
+                    <a href="{{ url_for('admin.edit_district', id=district.id) }}" class="btn btn-sm btn-outline-secondary me-2">Edit</a>
+                    <form method="POST" action="{{ url_for('admin.delete_district', district_id=district.id) }}" style="display:inline;">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Delete district '{{ district.name }}'? This will permanently delete all companionships, members, interview slots, and bookings associated with this district." data-confirm-variant="danger">Delete</button>
+                    </form>
+                </div>
+            </li>
         {% endfor %}
         </ul>
-    </div>
 {% endblock %}

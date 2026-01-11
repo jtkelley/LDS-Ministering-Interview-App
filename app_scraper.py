@@ -84,9 +84,36 @@ def download_chromedriver_manual():
         return None
 
 def setup_chrome_driver():
-    """Set up Chrome driver with platform detection (Windows/Linux)."""
+    """Set up Chrome driver with platform detection (Windows/Linux) or Remote Selenium."""
     print("🔍 [DEBUG] setup_chrome_driver called")
 
+    # Check for remote Selenium URL (Docker/Oracle Cloud deployment)
+    selenium_url = os.environ.get('SELENIUM_URL')
+
+    if selenium_url:
+        print(f"🌐 Using remote Selenium at: {selenium_url}")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-images")
+        chrome_options.add_argument("--disable-extensions")
+
+        try:
+            driver = webdriver.Remote(
+                command_executor=selenium_url,
+                options=chrome_options
+            )
+            print("✅ Remote Chrome driver initialized successfully")
+            time.sleep(2)
+            return driver
+        except Exception as e:
+            print(f"❌ Failed to connect to remote Selenium: {e}")
+            raise Exception(f"Could not connect to Selenium at {selenium_url}: {e}")
+
+    # Local Chrome setup (Windows/Linux without SELENIUM_URL)
     # Detect platform
     import platform
     is_windows = platform.system() == 'Windows'
@@ -344,12 +371,40 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                 progress_callback("❌ Verify button not clickable or not enabled")
             return None
 
+        # Check for invalid credentials error
+        if progress_callback:
+            progress_callback("📍 Checking for login errors...")
+        try:
+            # Wait a bit for error message to appear if credentials are wrong
+            time.sleep(2)
+
+            # Check for the specific error message
+            error_element = driver.find_element(By.ID, "password-error-text")
+            if error_element and "Invalid username and password combination" in error_element.text:
+                if progress_callback:
+                    progress_callback("❌ Invalid username and password combination. Please check your credentials.")
+                return None
+        except:
+            # No error found, continue
+            pass
+
+        # Also check for error in page source as backup
+        if "Invalid username and password combination" in driver.page_source:
+            if progress_callback:
+                progress_callback("❌ Invalid username and password combination. Please check your credentials.")
+            return None
+
         # Step 6: Wait for ministering page to load
         if progress_callback:
             progress_callback("📍 Step 6: Waiting for ministering page to load...")
-        WebDriverWait(driver, 30).until(
-            lambda driver: "ministering" in driver.current_url.lower() or "companionship" in driver.page_source.lower()
-        )
+        try:
+            WebDriverWait(driver, 30).until(
+                lambda driver: "ministering" in driver.current_url.lower() or "companionship" in driver.page_source.lower()
+            )
+        except TimeoutException:
+            if progress_callback:
+                progress_callback("❌ Timeout waiting for ministering page. Login may have failed.")
+            return None
         if progress_callback:
             progress_callback("✅ Ministering page loaded successfully")
 

@@ -61,8 +61,16 @@ WORKDIR /app
 # Copy only the necessary files and folders
 COPY requirements.txt ./
 COPY app.py ./
+COPY config.py ./
+COPY models.py ./
+COPY shared.py ./
+COPY services.py ./
+COPY routes_admin.py ./
+COPY routes_public.py ./
 COPY app_scraper.py ./
+COPY utils/ ./utils/
 COPY templates/ ./templates/
+
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt

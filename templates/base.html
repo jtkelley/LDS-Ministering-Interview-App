@@ -49,7 +49,7 @@
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{{ url_for('admin') if current_user.is_authenticated and current_user.role == 'admin' else url_for('interviewer_dashboard') }}">Ministering Interviews</a>
+            <a class="navbar-brand" href="{{ url_for('admin.admin') if current_user.is_authenticated and current_user.role == 'admin' else url_for('public.interviewer_dashboard') }}">Ministering Interviews</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -59,33 +59,33 @@
                         {% if current_user.role == 'admin' %}
                             {# Admin Navigation #}
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('admin') }}">Calendar</a>
+                                <a class="nav-link" href="{{ url_for('admin.admin') }}">Calendar</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('manage_districts') }}">Manage Districts</a>
+                                <a class="nav-link" href="{{ url_for('admin.manage_districts') }}">Manage Districts</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('scrape_data') }}">Scrape from LCR</a>
+                                <a class="nav-link" href="{{ url_for('admin.scrape_data') }}">Scrape from LCR</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('import_csv') }}">Import from CSV</a>
+                                <a class="nav-link" href="{{ url_for('admin.import_csv') }}">Import from CSV</a>
                             </li>
                             <li class="nav-item">
                                 <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#sendAllModal">📧 Send All Notifications</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('notification_report') }}">📊 Notification Report</a>
+                                <a class="nav-link" href="{{ url_for('admin.notification_report') }}">📊 Notification Report</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('manage_users') }}">Manage Users</a>
+                                <a class="nav-link" href="{{ url_for('admin.manage_users') }}">Manage Users</a>
                             </li>
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('system_settings') }}">⚙️ Settings</a>
+                                <a class="nav-link" href="{{ url_for('admin.system_settings') }}">⚙️ Settings</a>
                             </li>
                         {% else %}
                             {# Interviewer Navigation #}
                             <li class="nav-item">
-                                <a class="nav-link" href="{{ url_for('interviewer_dashboard') }}">Interview Calendar</a>
+                                <a class="nav-link" href="{{ url_for('public.interviewer_dashboard') }}">Interview Calendar</a>
                             </li>
                         {% endif %}
                     {% endif %}
@@ -144,7 +144,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <a href="{{ url_for('send_all_notifications') }}" class="btn btn-primary">✉️ Send Notifications</a>
+                    <a href="{{ url_for('admin.send_all_notifications') }}" class="btn btn-primary">✉️ Send Notifications</a>
                 </div>
             </div>
         </div>

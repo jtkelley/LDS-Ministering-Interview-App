@@ -13,10 +13,10 @@
 </head>
 <body>
     <div class="navbar">
-        <a href="{{ url_for('admin') }}">Calendar</a>
-        <a href="{{ url_for('manage_districts') }}">Manage Districts</a>
-        <a href="{{ url_for('import_companionships') }}">Import Companionships</a>
-        <a href="{{ url_for('send_all_notifications') }}">Send Notifications</a>
+        <a href="{{ url_for('admin.admin') }}">Calendar</a>
+        <a href="{{ url_for('admin.manage_districts') }}">Manage Districts</a>
+        <a href="{{ url_for('admin.import_companionships') }}">Import Companionships</a>
+        <a href="{{ url_for('admin.send_all_notifications') }}">Send Notifications</a>
     </div>
     
     <div class="content">
@@ -42,7 +42,7 @@
             </div>
             <button type="submit" class="btn btn-primary">Update</button>
         </form>
-        <a href="{{ url_for('district_detail', id=member.companionship.district_id) }}" class="btn btn-secondary mt-3">Back</a>
+        <a href="{{ url_for('admin.district_detail', id=member.companionship.district_id) }}" class="btn btn-secondary mt-3">Back</a>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>

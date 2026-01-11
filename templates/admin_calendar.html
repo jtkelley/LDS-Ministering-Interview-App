@@ -17,19 +17,19 @@
             
             <div class="row mt-3 g-3">
                 <div class="col-md-4">
-                    <a href="{{ url_for('scrape_data') }}" class="btn btn-primary w-100">
+                    <a href="{{ url_for('admin.scrape_data') }}" class="btn btn-primary w-100">
                         <strong>📱 Scrape from LCR</strong>
                         <small class="d-block mt-1">Import Districts and companionships directly from LDS.org</small>
                     </a>
                 </div>
                 <div class="col-md-4">
-                    <a href="{{ url_for('import_csv') }}" class="btn btn-primary w-100">
+                    <a href="{{ url_for('admin.import_csv') }}" class="btn btn-primary w-100">
                         <strong>📄 Import from CSV</strong>
                         <small class="d-block mt-1">Upload a CSV file with Districts and companionships</small>
                     </a>
                 </div>
                 <div class="col-md-4">
-                    <a href="{{ url_for('manage_districts') }}" class="btn btn-secondary w-100">
+                    <a href="{{ url_for('admin.manage_districts') }}" class="btn btn-secondary w-100">
                         <strong>✏️ Manual Entry</strong>
                         <small class="d-block mt-1">Create districts and Companionships manually</small>
                     </a>
@@ -82,7 +82,7 @@
                 <div class="card-header">
                     <h5 class="card-title mb-0">{{ district.name }}</h5>
                     <small class="text-muted">Interviewer: {{ district.interviewer_name }}</small>
-                    <a href="{{ url_for('district_detail', id=district.id) }}" class="btn btn-sm btn-outline-primary float-end">Manage</a>
+                    <a href="{{ url_for('admin.district_detail', id=district.id) }}" class="btn btn-sm btn-outline-primary float-end">Manage</a>
                 </div>
                 <div class="card-body">
                     {% set slots = district_slots[district.id] %}
@@ -116,8 +116,14 @@
                                             <ul class="list-unstyled mt-1 mb-1 small">
                                             {% for booking in slot.bookings %}
                                                 <li class="d-flex justify-content-between align-items-center">
-                                                    <span>{{ booking.member.name }} {% if booking.member.phone %}{{ booking.member.phone }}{% endif %}</span>
-                                                    <form method="POST" action="{{ url_for('remove_booking', booking_id=booking.id) }}" style="display:inline;">
+                                                    <span>
+                                                        <strong>{{ booking.member.name }}</strong>
+                                                        {% if booking.member.phone %}
+                                                            - {{ booking.member.phone }}
+                                                        {% endif %}
+                                                        <span class="badge bg-secondary ms-2">{{ booking.interview_type|default('in-person')|title }}</span>
+                                                    </span>
+                                                    <form method="POST" action="{{ url_for('admin.remove_booking', booking_id=booking.id) }}" style="display:inline;">
                                                         <button type="submit" class="btn btn-sm btn-outline-danger btn-close" data-confirm-message="Remove {{ booking.member.name }}?" data-confirm-variant="danger" aria-label="Remove"></button>
                                                     </form>
                                                 </li>
@@ -127,9 +133,9 @@
                                         {% if slot.bookings|length < 10 %}
                                             {% set booked_ids = slot.bookings|map(attribute='member_id')|list %}
                                             {% set allowed_companionship = slot.bookings[0].member.companionship if slot.bookings else None %}
-                                            <form method="POST" action="{{ url_for('add_booking', slot_id=slot.id) }}" class="mt-1">
-                                                <div class="input-group input-group-sm">
-                                                    <select name="member_id" class="form-select select2" style="flex: 1;">
+                                            <form method="POST" action="{{ url_for('admin.add_booking', slot_id=slot.id) }}" class="mt-1">
+                                                <div class="d-flex gap-2 mb-1">
+                                                    <select name="member_id" class="form-select form-select-sm select2" style="flex: 1;">
                                                         <option value="">Add member...</option>
                                                         {% if allowed_companionship %}
                                                             {% for member in allowed_companionship.members %}
@@ -146,6 +152,10 @@
                                                                 {% endfor %}
                                                             {% endfor %}
                                                         {% endif %}
+                                                    </select>
+                                                    <select name="interview_type" class="form-select form-select-sm" style="flex: 0 0 auto; width: 110px;">
+                                                        <option value="in-person">In-Person</option>
+                                                        <option value="phone">Phone</option>
                                                     </select>
                                                     <button type="submit" class="btn btn-primary btn-sm">Add</button>
                                                 </div>
@@ -168,9 +178,21 @@
 {% block extra_js %}
     <script>
         $(document).ready(function() {
+            // Initialize Select2
             $('.select2').select2({
-                placeholder: 'Search for member...',
-                allowClear: true
+                placeholder: 'Add member...',
+                allowClear: true,
+                width: '100%'
+            });
+
+            // Ensure form submits when Add button is clicked
+            $('form[action*="add_booking"]').on('submit', function(e) {
+                var memberId = $(this).find('select[name="member_id"]').val();
+                if (!memberId || memberId === '') {
+                    e.preventDefault();
+                    alert('Please select a member first');
+                    return false;
+                }
             });
         });
     </script>
