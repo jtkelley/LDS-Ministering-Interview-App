@@ -50,9 +50,9 @@ def download_chromedriver_manual():
     try:
         print("🔄 Trying manual ChromeDriver download...")
 
-        # For Chrome 141, we need ChromeDriver 141
-        chrome_version = "141"
-        chromedriver_version = "141.0.7390.0"
+        # For Chrome 143, we need ChromeDriver 143
+        chrome_version = "143"
+        chromedriver_version = "143.0.7499.0"
 
         print(f"📋 Using ChromeDriver version: {chromedriver_version}")
 
@@ -83,8 +83,35 @@ def download_chromedriver_manual():
         print(f"❌ Manual download failed: {e}")
         return None
 
-def setup_chrome_driver():
-    """Set up Chrome driver with platform detection (Windows/Linux) or Remote Selenium."""
+def take_screenshot(driver, name, output_dir="."):
+    """Take a screenshot for debugging."""
+    try:
+        screenshot_path = os.path.join(output_dir, f"screenshot_{name}.png")
+        driver.save_screenshot(screenshot_path)
+        print(f"📸 Screenshot saved: {screenshot_path}")
+    except Exception as e:
+        print(f"❌ Failed to take screenshot: {e}")
+
+def save_page_source(driver, name, output_dir="."):
+    """Save the current page source for debugging."""
+    try:
+        source_path = os.path.join(output_dir, f"page_source_{name}.html")
+        with open(source_path, 'w', encoding='utf-8') as f:
+            f.write(driver.page_source)
+        print(f"📄 Page source saved: {source_path}")
+    except Exception as e:
+        print(f"❌ Failed to save page source: {e}")
+
+def setup_chrome_driver(headless=None, debug_mode=False):
+    """Set up Chrome driver with platform detection (Windows/Linux) or Remote Selenium.
+
+    Args:
+        headless: Force headless mode (True/False). None = auto-detect based on platform.
+        debug_mode: If True, enables screenshot/page source saving during scraping.
+
+    Returns:
+        tuple: (driver, debug_mode) - the WebDriver instance and debug flag
+    """
     print("🔍 [DEBUG] setup_chrome_driver called")
 
     # Check for remote Selenium URL (Docker/Oracle Cloud deployment)
@@ -108,7 +135,7 @@ def setup_chrome_driver():
             )
             print("✅ Remote Chrome driver initialized successfully")
             time.sleep(2)
-            return driver
+            return driver, debug_mode
         except Exception as e:
             print(f"❌ Failed to connect to remote Selenium: {e}")
             raise Exception(f"Could not connect to Selenium at {selenium_url}: {e}")
@@ -123,13 +150,21 @@ def setup_chrome_driver():
 
     chrome_options = Options()
 
-    # Headless mode for production/Docker, visible for local debugging on Windows
-    if is_linux or os.environ.get('FLASK_ENV') == 'production':
+    # Determine headless mode: explicit parameter > environment > platform default
+    # Note: For visible mode, we simply don't add any headless flag
+    if headless is True:
+        print("🔇 Running in headless mode (explicitly requested)")
+        chrome_options.add_argument("--headless=new")
+    elif headless is False:
+        print("👁️  Running in visible mode (explicitly requested)")
+        # Don't add headless flag - browser will be visible
+        chrome_options.add_argument("--start-maximized")
+    elif is_linux or os.environ.get('FLASK_ENV') == 'production':
         print("🐧 Running in headless mode (Linux/Production)")
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")
     else:
         print("🪟 Running in visible mode (Windows/Development)")
-        chrome_options.add_argument("--headless=false")
+        # Don't add headless flag - browser will be visible
         chrome_options.add_argument("--start-maximized")
 
     # Common options for all platforms
@@ -196,7 +231,7 @@ def setup_chrome_driver():
         # Give the browser window time to fully appear
         time.sleep(2)
 
-        return driver
+        return driver, debug_mode
 
     except Exception as e:
         print(f"❌ All ChromeDriver methods failed: {e}")
@@ -207,21 +242,32 @@ def setup_chrome_driver():
         print("   4. Try downloading ChromeDriver manually from https://chromedriver.chromium.org/")
         raise Exception("Could not initialize Chrome driver with any method")
 
-def login_to_lcr(driver, username, password, progress_callback=None):
+def login_to_lcr(driver, username, password, progress_callback=None, debug_mode=False, group="brothers"):
     """Perform the LCR login process and extract ministering data from JSON.
-    Returns the extracted data as a list of dictionaries."""
+
+    Args:
+        driver: WebDriver instance
+        username: LCR username
+        password: LCR password
+        progress_callback: Optional callback for progress updates
+        debug_mode: If True, saves screenshots and page source at each step
+        group: "brothers" or "sisters" - which ministering group to scrape
+
+    Returns:
+        The extracted data as a list of dictionaries.
+    """
     print("🔍 [DEBUG] login_to_lcr called")
     try:
         print("🔍 [DEBUG] Starting login process")
         if progress_callback:
             progress_callback("🔐 Starting LCR login process...")
 
-        # Step 1: Navigate to LCR ministering page
+        # Step 1: Navigate to LCR home page (login page)
         print("🔍 [DEBUG] Step 1: Navigating to LCR")
         if progress_callback:
-            progress_callback("📍 Step 1: Navigating to LCR ministering page...")
+            progress_callback("📍 Step 1: Navigating to LCR...")
         try:
-            driver.get("https://lcr.churchofjesuschrist.org/ministering")
+            driver.get("https://lcr.churchofjesuschrist.org/")
             print("🔍 [DEBUG] Navigation completed")
             if progress_callback:
                 progress_callback(f"📍 Current URL: {driver.current_url}")
@@ -237,6 +283,10 @@ def login_to_lcr(driver, username, password, progress_callback=None):
         if progress_callback:
             progress_callback("📍 Waiting for login page to load...")
         time.sleep(3)
+
+        if debug_mode:
+            take_screenshot(driver, "01_navigate")
+            save_page_source(driver, "01_navigate")
 
         # Check if we got redirected or if there's an error
         current_url = driver.current_url
@@ -286,6 +336,8 @@ def login_to_lcr(driver, username, password, progress_callback=None):
             if progress_callback:
                 progress_callback("✅ Username entered")
             time.sleep(1)
+            if debug_mode:
+                take_screenshot(driver, "02_username_entered")
         except TimeoutException:
             print("🔍 [DEBUG] Username field not found")
             if progress_callback:
@@ -334,6 +386,8 @@ def login_to_lcr(driver, username, password, progress_callback=None):
             if progress_callback:
                 progress_callback("✅ Password entered")
             time.sleep(1)
+            if debug_mode:
+                take_screenshot(driver, "03_password_entered")
         except TimeoutException:
             if progress_callback:
                 progress_callback("❌ Password field not found or not visible")
@@ -366,6 +420,8 @@ def login_to_lcr(driver, username, password, progress_callback=None):
             if progress_callback:
                 progress_callback("✅ Verify button clicked")
             time.sleep(3)
+            if debug_mode:
+                take_screenshot(driver, "04_verify_clicked")
         except TimeoutException:
             if progress_callback:
                 progress_callback("❌ Verify button not clickable or not enabled")
@@ -394,19 +450,61 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                 progress_callback("❌ Invalid username and password combination. Please check your credentials.")
             return None
 
-        # Step 6: Wait for ministering page to load
+        # Step 6: Wait for LCR home page to load, then click Brothers or Sisters
         if progress_callback:
-            progress_callback("📍 Step 6: Waiting for ministering page to load...")
+            progress_callback("📍 Step 6: Waiting for LCR home page to load...")
+        try:
+            # Wait for the home page to load (look for ministering links)
+            WebDriverWait(driver, 30).until(
+                EC.presence_of_element_located((By.XPATH, "//a[contains(text(), 'Brothers') or contains(text(), 'Sisters')]"))
+            )
+            if progress_callback:
+                progress_callback("✅ LCR home page loaded")
+        except TimeoutException:
+            if progress_callback:
+                progress_callback("❌ Timeout waiting for LCR home page. Login may have failed.")
+            return None
+
+        # Click on Brothers or Sisters link based on group parameter
+        group_label = "Brothers" if group == "brothers" else "Sisters"
+        if progress_callback:
+            progress_callback(f"📍 Clicking on '{group_label}' link...")
+        try:
+            group_link = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, f"//a[contains(text(), '{group_label}')]"))
+            )
+            group_link.click()
+            if progress_callback:
+                progress_callback(f"✅ Clicked '{group_label}' link")
+            time.sleep(2)  # Wait for navigation
+
+            # Refresh page to get fresh __NEXT_DATA__ JSON (client-side nav doesn't update it)
+            if progress_callback:
+                progress_callback("📍 Refreshing page to load fresh data...")
+            driver.refresh()
+            time.sleep(3)  # Wait for page to reload
+        except TimeoutException:
+            if progress_callback:
+                progress_callback(f"❌ Could not find or click '{group_label}' link")
+            return None
+
+        # Wait for ministering page to load
+        if progress_callback:
+            progress_callback("📍 Waiting for ministering page to load...")
         try:
             WebDriverWait(driver, 30).until(
                 lambda driver: "ministering" in driver.current_url.lower() or "companionship" in driver.page_source.lower()
             )
         except TimeoutException:
             if progress_callback:
-                progress_callback("❌ Timeout waiting for ministering page. Login may have failed.")
+                progress_callback("❌ Timeout waiting for ministering page.")
             return None
         if progress_callback:
             progress_callback("✅ Ministering page loaded successfully")
+
+        if debug_mode:
+            take_screenshot(driver, "05_ministering_loaded")
+            save_page_source(driver, "05_ministering_loaded")
 
         # Step 7: Try to extract from JSON first, fall back to table scraping if needed
         if progress_callback:
@@ -459,8 +557,21 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                     progress_callback(f"❌ Error accessing ministeringData: {e}")
                 raise Exception("Error accessing ministeringData")
 
+            # Select the right key based on group
+            group_key = "elders" if group == "brothers" else "reliefSociety"
+            group_label = "brothers" if group == "brothers" else "sisters"
+
+            if progress_callback:
+                progress_callback(f"📍 Extracting {group_label} data (key: {group_key})...")
+
             companionship_counter = 1
-            for district in ministering.get("elders", []):
+            group_data = ministering.get(group_key, [])
+
+            if not group_data:
+                if progress_callback:
+                    progress_callback(f"⚠️ No data found for key '{group_key}'. Available keys: {list(ministering.keys())}")
+
+            for district in group_data:
                 district_name = district.get("districtName", "")
                 interviewer = district.get("supervisorName", "")
                 for companionship in district.get("companionships", []):
@@ -486,7 +597,7 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                 companionships = len(set(row['companionship_id'] for row in results))
                 members = len(results)
                 progress_callback(
-                    f"✅ Extracted {members} ministering brothers from JSON",
+                    f"✅ Extracted {members} ministering {group_label} from JSON",
                     counts={'districts': districts, 'companionships': companionships, 'members': members}
                 )
             json_extraction_success = True
@@ -657,53 +768,94 @@ def login_to_lcr(driver, username, password, progress_callback=None):
 
                             # Look for popup - try different selectors
                             popup = None
+                            popup_selectors = [
+                                ("CLASS_NAME", "sc-cd0364fd-0"),
+                                ("CSS_SELECTOR", "[role='dialog']"),
+                                ("CSS_SELECTOR", "[role='tooltip']"),
+                                ("CSS_SELECTOR", "[aria-modal='true']"),
+                                ("CSS_SELECTOR", ".MuiPopover-root"),
+                                ("CSS_SELECTOR", ".MuiDialog-root"),
+                                ("CSS_SELECTOR", "[class*='popup']"),
+                                ("CSS_SELECTOR", "[class*='modal']"),
+                                ("CSS_SELECTOR", "[class*='Popover']"),
+                            ]
+
+                            for selector_type, selector_value in popup_selectors:
+                                try:
+                                    if selector_type == "CLASS_NAME":
+                                        popup = driver.find_element(By.CLASS_NAME, selector_value)
+                                    else:
+                                        popup = driver.find_element(By.CSS_SELECTOR, selector_value)
+                                    print(f"🔍 [DEBUG] Popup found with {selector_type}='{selector_value}' for {link_text}")
+                                    break
+                                except Exception:
+                                    continue
+
+                            if not popup:
+                                print(f"🔍 [DEBUG] No popup container found for {link_text}, searching whole page...")
+
+                            # Whether or not we found a popup container, try to find tel: and mailto: links
+                            # Search in popup if found, otherwise search entire page
+                            search_context = popup if popup else driver
+                            total_popups += 1
+                            phone = ""
+                            email = ""
+
+                            # Extract phone from tel: link
                             try:
-                                popup = driver.find_element(By.CLASS_NAME, "sc-cd0364fd-0")
-                                print(f"🔍 [DEBUG] Popup found with class 'sc-cd0364fd-0' for {link_text}")
+                                phone_elem = search_context.find_element(By.XPATH, ".//a[contains(@href, 'tel:')]")
+                                phone = phone_elem.get_attribute("href").replace("tel:", "").strip()
+                                print(f"🔍 [DEBUG] Phone found for {link_text}: {phone}")
+                                if phone:
+                                    total_phone_found += 1
                             except Exception:
-                                try:
-                                    popup = driver.find_element(By.CSS_SELECTOR, "[role='dialog']")
-                                    print(f"🔍 [DEBUG] Popup found with role='dialog' for {link_text}")
-                                except Exception:
-                                    print(f"🔍 [DEBUG] No popup found for {link_text}")
-
-                            if popup:
-                                total_popups += 1
-                                phone = ""
-                                email = ""
-
-                                # Extract phone from tel: link
-                                try:
-                                    phone_elem = popup.find_element(By.XPATH, ".//a[contains(@href, 'tel:')]")
-                                    phone = phone_elem.get_attribute("href").replace("tel:", "").strip()
-                                    print(f"🔍 [DEBUG] Phone found for {link_text}: {phone}")
-                                    if phone:
-                                        total_phone_found += 1
-                                except Exception:
+                                # Try searching whole page if popup search failed
+                                if popup:
+                                    try:
+                                        phone_elem = driver.find_element(By.XPATH, "//a[contains(@href, 'tel:')]")
+                                        phone = phone_elem.get_attribute("href").replace("tel:", "").strip()
+                                        print(f"🔍 [DEBUG] Phone found (page search) for {link_text}: {phone}")
+                                        if phone:
+                                            total_phone_found += 1
+                                    except Exception:
+                                        print(f"🔍 [DEBUG] No phone link found for {link_text}")
+                                else:
                                     print(f"🔍 [DEBUG] No phone link found for {link_text}")
 
-                                # Extract email from mailto: link
-                                try:
-                                    email_elem = popup.find_element(By.XPATH, ".//a[contains(@href, 'mailto:')]")
-                                    email = email_elem.get_attribute("href").replace("mailto:", "").strip()
-                                    print(f"🔍 [DEBUG] Email found for {link_text}: {email}")
-                                    if email:
-                                        total_email_found += 1
-                                except Exception:
+                            # Extract email from mailto: link
+                            try:
+                                email_elem = search_context.find_element(By.XPATH, ".//a[contains(@href, 'mailto:')]")
+                                email = email_elem.get_attribute("href").replace("mailto:", "").strip()
+                                print(f"🔍 [DEBUG] Email found for {link_text}: {email}")
+                                if email:
+                                    total_email_found += 1
+                            except Exception:
+                                # Try searching whole page if popup search failed
+                                if popup:
+                                    try:
+                                        email_elem = driver.find_element(By.XPATH, "//a[contains(@href, 'mailto:')]")
+                                        email = email_elem.get_attribute("href").replace("mailto:", "").strip()
+                                        print(f"🔍 [DEBUG] Email found (page search) for {link_text}: {email}")
+                                        if email:
+                                            total_email_found += 1
+                                    except Exception:
+                                        print(f"🔍 [DEBUG] No email link found for {link_text}")
+                                else:
                                     print(f"🔍 [DEBUG] No email link found for {link_text}")
 
-                                # Update matching row in results
-                                for row_data in results:
-                                    if row_data['name'] == link_text:
-                                        if phone and not row_data['phone']:
-                                            row_data['phone'] = phone
-                                            print(f"🔍 [DEBUG] Updated phone for {link_text}")
-                                        if email and not row_data['email']:
-                                            row_data['email'] = email
-                                            print(f"🔍 [DEBUG] Updated email for {link_text}")
-                                        break
+                            # Update matching row in results (OUTSIDE the except block)
+                            for row_data in results:
+                                if row_data['name'] == link_text:
+                                    if phone and not row_data['phone']:
+                                        row_data['phone'] = phone
+                                        print(f"🔍 [DEBUG] Updated phone for {link_text}")
+                                    if email and not row_data['email']:
+                                        row_data['email'] = email
+                                        print(f"🔍 [DEBUG] Updated email for {link_text}")
+                                    break
 
-                                # Close popup
+                            # Close popup
+                            if popup:
                                 try:
                                     close_btn = popup.find_element(By.XPATH, ".//button[contains(text(), 'Close') or @aria-label='Close']")
                                     close_btn.click()
@@ -714,7 +866,7 @@ def login_to_lcr(driver, username, password, progress_callback=None):
                                         print(f"🔍 [DEBUG] Closed popup with Escape for {link_text}")
                                     except Exception:
                                         print(f"🔍 [DEBUG] Could not close popup for {link_text}")
-                                time.sleep(0.5)
+                            time.sleep(0.5)
 
                         except Exception as e:
                             print(f"🔍 [DEBUG] Error processing popup for {link_text}: {e}")
@@ -752,9 +904,13 @@ def login_to_lcr(driver, username, password, progress_callback=None):
             progress_callback(f"❌ Login process failed: {e}")
         return None
 
-def scrape_ministering_data(username, password, progress_callback=None):
+def scrape_ministering_data(username, password, progress_callback=None, debug_mode=False, group="brothers"):
     """Main function to scrape ministering data for the web app.
-    Returns a list of ministering brother dictionaries or None on failure."""
+    Returns a list of ministering dictionaries or None on failure.
+
+    Args:
+        group: "brothers" or "sisters" - which ministering group to scrape
+    """
     print("🔍 [DEBUG] scrape_ministering_data called with username length:", len(username) if username else 0)
     driver = None
     try:
@@ -762,14 +918,14 @@ def scrape_ministering_data(username, password, progress_callback=None):
         if progress_callback:
             progress_callback("🚀 Initializing Chrome driver for scraping...")
 
-        driver = setup_chrome_driver()
+        driver, debug_mode = setup_chrome_driver(debug_mode=debug_mode)
         print("🔍 [DEBUG] setup_chrome_driver() completed successfully")
 
         if progress_callback:
             progress_callback("🔐 Starting login and data extraction...")
 
         print("🔍 [DEBUG] About to call login_to_lcr()")
-        results = login_to_lcr(driver, username, password, progress_callback)
+        results = login_to_lcr(driver, username, password, progress_callback, debug_mode=debug_mode, group=group)
         print("🔍 [DEBUG] login_to_lcr() completed, results:", "None" if results is None else f"list with {len(results)} items")
 
         if results is not None:

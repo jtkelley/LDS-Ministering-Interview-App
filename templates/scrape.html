@@ -27,6 +27,17 @@
                 <label for="password" class="form-label">LCR Password</label>
                 <input type="password" class="form-control" id="password" name="password" required>
             </div>
+            <div class="mb-3">
+                <label class="form-label">Ministering Group</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="group" id="groupBrothers" value="brothers" checked>
+                    <label class="form-check-label" for="groupBrothers">Brothers (Elders Quorum)</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="group" id="groupSisters" value="sisters">
+                    <label class="form-check-label" for="groupSisters">Sisters (Relief Society)</label>
+                </div>
+            </div>
             <button type="submit" class="btn btn-primary">Start Scraping</button>
         </form>
         <a href="{{ url_for('admin.admin') }}" class="btn btn-secondary mt-3">Back to Admin</a>

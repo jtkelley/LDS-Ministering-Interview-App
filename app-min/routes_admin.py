@@ -406,152 +406,6 @@ def manage_districts():
     districts = District.query.all()
     return render_template('manage_districts.html', districts=districts)
 
-@admin_bp.route('/scrape', methods=['GET', 'POST'])
-@admin_required
-def scrape_data():
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        group = request.form.get('group', 'brothers')
-
-        if not username or not password:
-            flash('Username and password are required.')
-            return redirect(url_for('admin.scrape_data'))
-        
-        # Run scraping in a thread to avoid blocking
-        progress_id = str(uuid.uuid4())
-        with progress_lock:
-            progress_store[progress_id] = {
-                'status': 'running',
-                'message': 'Initializing scraper...',
-                'step': 0,
-                'total_steps': 10,
-                'districts_found': 0,
-                'companionships_found': 0,
-                'members_found': 0,
-                'errors': [],
-                'group': group
-            }
-        
-        def run_scrape():
-            try:
-                # Import the scraper module
-                print(f"[DEBUG] Starting scraper thread for progress_id: {progress_id}")
-                from app_scraper import scrape_ministering_data
-                print(f"[DEBUG] Successfully imported scrape_ministering_data")
-
-                def progress_callback(message, counts=None):
-                    print(f"[DEBUG] Progress callback: {message}, counts: {counts}")
-                    # Update progress store with the message
-                    with progress_lock:
-                        progress_store[progress_id]['message'] = message
-
-                        # Update counts if provided
-                        if counts and isinstance(counts, dict):
-                            if 'districts' in counts:
-                                progress_store[progress_id]['districts_found'] = counts['districts']
-                            if 'companionships' in counts:
-                                progress_store[progress_id]['companionships_found'] = counts['companionships']
-                            if 'members' in counts:
-                                progress_store[progress_id]['members_found'] = counts['members']
-
-                        # Try to extract step information from message
-                        if 'Step' in message:
-                            try:
-                                step_num = int(message.split('Step')[1].split(':')[0].strip())
-                                progress_store[progress_id]['step'] = step_num
-                            except:
-                                pass
-
-                        # Check if this is an error message and add to errors list
-                        if message.startswith('❌') or message.startswith('[ERROR]') or 'Error' in message or 'Failed' in message:
-                            progress_store[progress_id]['errors'].append(message)
-                            progress_store[progress_id]['status'] = 'error'
-                        else:
-                            progress_store[progress_id]['status'] = 'running'
-
-                # Run the scraper
-                print(f"[DEBUG] Calling scrape_ministering_data with username: {username[:3]}..., group: {group}")
-                results = scrape_ministering_data(username, password, progress_callback, group=group)
-                print(f"[DEBUG] Scraper returned {len(results) if results else 0} results")
-
-                if results:
-                    with progress_lock:
-                        progress_store[progress_id]['status'] = 'completed'
-                        progress_store[progress_id]['message'] = 'Scraping completed'
-                        progress_store[progress_id]['step'] = 10
-                        progress_store[progress_id]['districts_found'] = len(set(row['district'] for row in results))
-                        progress_store[progress_id]['companionships_found'] = len(set(row['companionship_id'] for row in results))
-                        progress_store[progress_id]['members_found'] = len(results)
-                        progress_store[progress_id]['scraped_districts'] = group_results_by_district(results)
-                        progress_store[progress_id]['raw_results'] = results  # Store raw results for CSV download
-                else:
-                    with progress_lock:
-                        progress_store[progress_id]['status'] = 'error'
-                        # Check if we have any error messages from the progress callback
-                        if progress_store[progress_id]['errors']:
-                            progress_store[progress_id]['message'] = 'Scraping failed - check errors below'
-                        else:
-                            progress_store[progress_id]['message'] = 'Scraping failed - no data returned'
-                            progress_store[progress_id]['errors'].append('Scraper returned no data. Check credentials and network connection.')
-
-            except Exception as e:
-                print(f"[ERROR] Scraper thread failed: {e}")
-                import traceback
-                traceback.print_exc()
-                with progress_lock:
-                    progress_store[progress_id]['status'] = 'error'
-                    progress_store[progress_id]['message'] = str(e)
-                    progress_store[progress_id]['errors'].append(str(e))
-        
-        thread = threading.Thread(target=run_scrape)
-        thread.start()
-        
-        return redirect(url_for('admin.scrape_progress', progress_id=progress_id))
-    
-    return render_template('scrape.html')
-
-@admin_bp.route('/scrape_progress/<progress_id>')
-@admin_required
-def scrape_progress(progress_id):
-    return render_template('scrape_progress.html', progress_id=progress_id)
-
-@admin_bp.route('/download_csv/<progress_id>')
-@admin_required
-def download_csv(progress_id):
-    with progress_lock:
-        progress_data = progress_store.get(progress_id)
-    
-    if not progress_data or progress_data['status'] != 'completed':
-        flash('No completed scrape data found.')
-        return redirect(url_for('admin.scrape_data'))
-    
-    raw_results = progress_data.get('raw_results')
-    if not raw_results:
-        flash('No raw data available for download.')
-        return redirect(url_for('admin.scrape_data'))
-    
-    # Create CSV in memory
-    import io
-    import csv
-    
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=['district', 'interviewer', 'name', 'phone', 'email', 'companionship_id'])
-    writer.writeheader()
-    for row in raw_results:
-        writer.writerow(row)
-    
-    # Create response with appropriate filename based on group
-    group = progress_data.get('group', 'brothers')
-    output.seek(0)
-    response = send_file(
-        io.BytesIO(output.getvalue().encode('utf-8')),
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name=f'ministering_{group}.csv'
-    )
-
-    return response
 
 @admin_bp.route('/import_csv', methods=['GET', 'POST'])
 @admin_required
@@ -803,9 +657,8 @@ def send_notifications(district_id):
         flash('No interview slots available for the current quarter. Please create slots before sending notifications.', 'warning')
         return redirect(url_for('admin.district_detail', id=district_id))
 
-    # Load email and SMS config
+    # Load email config
     sender_email = services.apply_email_config()
-    sms_configured = services.apply_sms_config()
 
     if not sender_email:
         flash('Email not configured. Please configure email settings before sending notifications.', 'error')
@@ -855,14 +708,6 @@ Ministering Interview App
                 except Exception as e:
                     print(f"Failed to send email to {member.email}: {e}")
 
-            # Send SMS (only if enabled and configured)
-            if sms_configured and member.can_receive_sms():
-                try:
-                    # Assuming SMS sending function is implemented
-                    # send_sms(member.phone, f'Interview slots available. Schedule at: {link}')
-                    pass
-                except Exception as e:
-                    print(f"Failed to send SMS to {member.phone}: {e}")
 
     # Commit all notification logs
     db.session.commit()
@@ -885,15 +730,13 @@ def send_individual_notification(member_id):
     current_quarter = ((today.month - 1) // 3) + 1
     current_year = today.year
 
-    # Load email and SMS config
+    # Load email config
     sender_email = services.apply_email_config()
-    sms_configured = services.apply_sms_config()
 
     if not sender_email:
         return {'success': False, 'error': 'Email not configured'}, 400
 
     email_sent = False
-    sms_sent = False
     errors = []
 
     link = url_for('public.schedule', token=member.token, _external=True)
@@ -939,53 +782,9 @@ def send_individual_notification(member_id):
     else:
         errors.append('No email address')
 
-    # Send SMS (only if enabled and configured)
-    if sms_configured and member.can_receive_sms():
-        try:
-            sms_message = services.format_sms_message(link, member)
-            if services.send_sms(member.phone, sms_message):
-                sms_sent = True
-
-                # Log successful SMS send
-                log = NotificationLog(
-                    member_id=member.id,
-                    method='sms',
-                    quarter=current_quarter,
-                    year=current_year,
-                    success=True
-                )
-                db.session.add(log)
-                db.session.commit()
-        except Exception as e:
-            error_msg = str(e)
-            errors.append(f'SMS failed: {error_msg}')
-
-            # Log failed SMS send
-            try:
-                log = NotificationLog(
-                    member_id=member.id,
-                    method='sms',
-                    quarter=current_quarter,
-                    year=current_year,
-                    success=False,
-                    error_message=error_msg
-                )
-                db.session.add(log)
-                db.session.commit()
-            except Exception as log_error:
-                print(f"Failed to log notification error: {log_error}")
-                db.session.rollback()
-
     # Build response
-    if email_sent or sms_sent:
-        message_parts = []
-        if email_sent:
-            message_parts.append('Email sent')
-        if sms_sent:
-            message_parts.append('SMS sent')
-        message = ' and '.join(message_parts)
-
-        return {'success': True, 'message': message}
+    if email_sent:
+        return {'success': True, 'message': 'Email sent'}
     else:
         error_message = '; '.join(errors) if errors else 'Failed to send notification'
         return {'success': False, 'error': error_message}, 400
@@ -1002,9 +801,8 @@ def send_all_notifications():
     current_quarter = ((today.month - 1) // 3) + 1
     current_year = today.year
 
-    # Load email and SMS config
+    # Load email config
     sender_email = services.apply_email_config()
-    sms_configured = services.apply_sms_config()
 
     if not sender_email:
         flash('Email not configured. Please configure email settings before sending notifications.', 'error')
@@ -1087,41 +885,6 @@ def send_all_notifications():
                             db.session.rollback()
                 else:
                     print(f"⚠️ Skipping {member.name} - no email address")
-
-                # Send SMS (only if enabled and configured)
-                if sms_configured and member.can_receive_sms():
-                    try:
-                        sms_message = services.format_sms_message(link, member)
-                        services.send_sms(member.phone, sms_message)
-
-                        # Log successful SMS send
-                        log = NotificationLog(
-                            member_id=member.id,
-                            method='sms',
-                            quarter=current_quarter,
-                            year=current_year,
-                            success=True
-                        )
-                        db.session.add(log)
-                        db.session.commit()  # Commit immediately after each send
-                    except Exception as e:
-                        print(f"Failed to send SMS to {member.phone}: {e}")
-
-                        # Log failed SMS send
-                        try:
-                            log = NotificationLog(
-                                member_id=member.id,
-                                method='sms',
-                                quarter=current_quarter,
-                                year=current_year,
-                                success=False,
-                                error_message=str(e)
-                            )
-                            db.session.add(log)
-                            db.session.commit()  # Commit immediately after each log
-                        except Exception as log_error:
-                            print(f"Failed to log notification error: {log_error}")
-                            db.session.rollback()
 
     # Build detailed message
     message_parts = []
@@ -1395,7 +1158,6 @@ def edit_member(member_id):
         member.name = request.form.get('name')
         member.phone = request.form.get('phone')
         member.email = request.form.get('email')
-        member.no_sms = request.form.get('no_sms') == 'on'
         db.session.commit()
         flash('Member updated successfully!')
         return redirect(url_for('admin.manage_members'))
@@ -1444,113 +1206,6 @@ def import_companionships():
         return redirect(url_for('admin.admin'))
     
     return render_template('import_companionships.html')
-
-@admin_bp.route('/import_progress/<progress_id>')
-def import_progress(progress_id):
-    """Return progress data as JSON for JavaScript polling"""
-    with progress_lock:
-        progress_data = progress_store.get(progress_id)
-    if progress_data:
-        return {
-            'status': progress_data['status'],
-            'message': progress_data['message'],
-            'step': progress_data['step'],
-            'total_steps': progress_data['total_steps'],
-            'districts_found': progress_data.get('districts_found', 0),
-            'companionships_found': progress_data.get('companionships_found', 0),
-            'members_found': progress_data.get('members_found', 0),
-            'errors': progress_data.get('errors', []),
-            'redirect_url': progress_data.get('redirect_url'),
-            'scraped_districts': progress_data.get('scraped_districts', [])
-        }
-    return {'status': 'not_found'}
-
-@admin_bp.route('/import_confirm', methods=['GET', 'POST'])
-@admin_required
-def import_confirm():
-    """Confirm and import data from web scraping"""
-    # Get progress_id from query string (GET) or form data (POST)
-    progress_id = request.args.get('progress_id') or request.form.get('progress_id')
-
-    with progress_lock:
-        progress_data = progress_store.get(progress_id)
-        if not progress_data or progress_data['status'] != 'completed':
-            flash('No completed scrape data found.')
-            return redirect(url_for('admin.scrape_data'))
-
-        scraped_districts = progress_data['scraped_districts']
-
-    if request.method == 'POST' and 'confirm_import' in request.form:
-        # Import the data
-        try:
-            # Clear existing data if requested
-            if 'clear_existing' in request.form:
-                # Delete in correct order due to foreign keys
-                Booking.query.delete()
-                InterviewSlot.query.delete()
-                Member.query.delete()
-                Companionship.query.delete()
-                District.query.delete()
-                db.session.commit()
-                flash('Cleared all existing data for fresh import.')
-
-            for district_data in scraped_districts:
-                district_name = district_data['name']
-                interviewer_name = district_data['interviewer']
-
-                # Find or create district
-                district = District.query.filter_by(name=district_name).first()
-                if not district:
-                    district = District(name=district_name, interviewer_name=interviewer_name)
-                    db.session.add(district)
-                    db.session.commit()
-
-                for comp_data in district_data['companionships']:
-                    # Create companionship
-                    companionship = Companionship(district_id=district.id)
-                    db.session.add(companionship)
-                    db.session.commit()
-
-                    for member_data in comp_data['members']:
-                        # Try to find existing member by email globally
-                        existing_member = Member.query.filter_by(email=member_data['email']).first() if member_data.get('email') else None
-
-                        if existing_member:
-                            # Update phone if different
-                            if existing_member.phone != member_data.get('phone') and member_data.get('phone'):
-                                existing_member.phone = member_data['phone']
-                            # Update name if different
-                            if existing_member.name != member_data['name']:
-                                existing_member.name = member_data['name']
-                            # Reassign to new companionship
-                            existing_member.companionship_id = companionship.id
-                            member = existing_member
-                        else:
-                            # Create new member
-                            member = Member(
-                                name=member_data['name'],
-                                phone=member_data.get('phone'),
-                                email=member_data.get('email'),
-                                companionship_id=companionship.id
-                            )
-                            db.session.add(member)
-
-                        # Ensure member is in the companionship
-                        if member not in companionship.members:
-                            companionship.members.append(member)
-
-                    db.session.commit()
-
-            flash('Data imported successfully!')
-            return redirect(url_for('admin.admin'))
-
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Import failed: {str(e)}')
-            return redirect(url_for('admin.scrape_progress', progress_id=progress_id))
-
-    # Display confirmation
-    return render_template('import_confirm.html', scraped_districts=scraped_districts, progress_id=progress_id, confirm_endpoint='admin.import_confirm')
 
 
 @admin_bp.route('/import_csv_confirm', methods=['GET', 'POST'])
@@ -1653,26 +1308,10 @@ def system_settings():
             'mail_password': '',
             'mail_from_email': '',
             'mail_from_name': 'Ministering Interview App',
-            'sms_provider': 'twilio',
-            'twilio_account_sid': '',
-            'twilio_auth_token': '',
-            'twilio_phone_number': '',
-            'aws_access_key_id': '',
-            'aws_secret_access_key': '',
-            'aws_region': '',
-            'aws_sns_sender_id': '',
-            'signalwire_project_id': '',
-            'signalwire_auth_token': '',
-            'signalwire_space_url': '',
-            'signalwire_phone_number': '',
             'reminder_enabled': True,
             'reminder_day_of_week': 0,
             'reminder_hour': 9,
             'reminder_minute': 0,
-            'sms_mode': 'one_way',
-            'sms_contact_enabled': True,
-            'sms_contact_name': '',
-            'sms_contact_phone': ''
         }
     else:
         # Get decrypted fields as dictionary
@@ -1710,34 +1349,6 @@ def save_system_settings():
             if mail_password:
                 config.mail_password = mail_password
 
-        elif config_type == 'sms':
-            config.sms_mode = request.form.get('sms_mode', 'one_way')
-            config.sms_contact_enabled = request.form.get('sms_contact_enabled') == 'on'
-            config.sms_contact_name = request.form.get('sms_contact_name', '')
-            config.sms_contact_phone = request.form.get('sms_contact_phone', '')
-            config.sms_provider = request.form.get('sms_provider', 'twilio')
-
-            if config.sms_provider == 'twilio':
-                config.twilio_account_sid = request.form.get('twilio_account_sid', '')
-                config.twilio_phone_number = request.form.get('twilio_phone_number', '')
-                twilio_auth_token = request.form.get('twilio_auth_token', '')
-                if twilio_auth_token:
-                    config.twilio_auth_token = twilio_auth_token
-            elif config.sms_provider == 'aws_sns':
-                config.aws_access_key_id = request.form.get('aws_access_key_id', '')
-                config.aws_region = request.form.get('aws_region', '')
-                config.aws_sns_sender_id = request.form.get('aws_sns_sender_id', '')
-                aws_secret_key = request.form.get('aws_secret_access_key', '')
-                if aws_secret_key:
-                    config.aws_secret_access_key = aws_secret_key
-            elif config.sms_provider == 'signalwire':
-                config.signalwire_project_id = request.form.get('signalwire_project_id', '')
-                config.signalwire_space_url = request.form.get('signalwire_space_url', '')
-                config.signalwire_phone_number = request.form.get('signalwire_phone_number', '')
-                signalwire_auth_token = request.form.get('signalwire_auth_token', '')
-                if signalwire_auth_token:
-                    config.signalwire_auth_token = signalwire_auth_token
-
         elif config_type == 'scheduler':
             config.reminder_enabled = request.form.get('reminder_enabled') == 'on'
             config.reminder_day_of_week = int(request.form.get('reminder_day_of_week', 0))
@@ -1749,11 +1360,9 @@ def save_system_settings():
         db.session.add(config)
         db.session.commit()
 
-        # Immediately reload email/SMS config into Flask app after saving
+        # Immediately reload email config into Flask app after saving
         if config_type == 'email':
             services.apply_email_config()
-        elif config_type == 'sms':
-            services.apply_sms_config()
 
         flash(f'{config_type.capitalize()} settings saved successfully!', 'success')
     except Exception as e:
@@ -1790,64 +1399,4 @@ def send_test_email():
         flash(f'Failed to send test email: {str(e)}', 'error')
 
     return redirect(url_for('admin.system_settings') + '#email')
-
-
-@admin_bp.route('/settings/test-sms', methods=['POST'])
-@admin_required
-def send_test_sms():
-    """Send a test SMS"""
-    config = SystemConfig.query.first()
-    if not config:
-        flash('System settings not configured yet.', 'error')
-        return redirect(url_for('admin.system_settings') + '#sms')
-
-    test_phone = request.form.get('test_phone_number', '').strip()
-    if not test_phone:
-        flash('Please enter a phone number to send the test SMS.', 'error')
-        return redirect(url_for('admin.system_settings') + '#sms')
-
-    try:
-        if not services.apply_sms_config():
-            flash('SMS not configured. Please configure your SMS provider settings first.', 'error')
-            return redirect(url_for('admin.system_settings') + '#sms')
-
-        test_link = request.url_root + 'schedule/test-token-123'
-        test_message = services.format_sms_message(test_link)
-
-        if not services.sms_config.get('provider') or not services.sms_config.get('client'):
-            flash('SMS provider not configured properly.', 'error')
-            return redirect(url_for('admin.system_settings') + '#sms')
-
-        if services.sms_config['provider'] == 'twilio':
-            result = services.sms_config['client'].messages.create(
-                body=test_message, from_=services.sms_config['from_number'], to=test_phone)
-            flash(f'Test SMS sent successfully to {test_phone}!', 'success')
-        elif services.sms_config['provider'] == 'aws_sns':
-            params = {'PhoneNumber': test_phone, 'Message': test_message}
-            if services.sms_config.get('sender_id'):
-                params['MessageAttributes'] = {'AWS.SNS.SMS.SenderID': {'DataType': 'String', 'StringValue': services.sms_config['sender_id']}}
-            result = services.sms_config['client'].publish(**params)
-            flash(f'Test SMS sent successfully to {test_phone}!', 'success')
-        elif services.sms_config['provider'] == 'signalwire':
-            try:
-                print(f"SignalWire - Sending SMS from {services.sms_config['from_number']} to {test_phone}")
-                result = services.sms_config['client'].messages.create(
-                    body=test_message,
-                    from_=services.sms_config['from_number'],
-                    to=test_phone
-                )
-                flash(f'Test SMS sent successfully to {test_phone}! SID: {result.sid}', 'success')
-            except Exception as sw_error:
-                print(f"SignalWire error details: {sw_error}")
-                import traceback
-                traceback.print_exc()
-                raise  # Re-raise to be caught by outer exception handler
-    except Exception as e:
-        error_msg = str(e)
-        # Add more context for common errors
-        if "Expecting value" in error_msg:
-            error_msg = f"SignalWire API returned invalid response. Check: 1) Space URL is correct 2) Project ID and Auth Token are valid 3) Phone number format is correct. Original error: {error_msg}"
-        flash(f'Failed to send test SMS: {error_msg}', 'error')
-
-    return redirect(url_for('admin.system_settings') + '#sms')
 

@@ -6,7 +6,20 @@
       "Bash(flutter pub get:*)",
       "Bash(flutter analyze:*)",
       "Bash(pip install:*)",
-      "Bash(move \"C:\\\\dev\\\\Ministering-Interviews\\\\deploy-scripts\\\\oracle_config.yaml\" \"C:\\\\dev\\\\Ministering-Interviews\\\\deploy-scripts\\\\oracle-cloud\"\")"
+      "Bash(move \"C:\\\\dev\\\\Ministering-Interviews\\\\deploy-scripts\\\\oracle_config.yaml\" \"C:\\\\dev\\\\Ministering-Interviews\\\\deploy-scripts\\\\oracle-cloud\"\")",
+      "Bash(ssh:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c \"taskkill /PID 30764 /F\")",
+      "Bash(icacls \"C:/dev/Ministering-Interviews/deploy-scripts/oracle-cloud/ssh-key-2026-01-11.key\" /inheritance:r /grant:r \"$env:USERNAME:R\")",
+      "Bash(icacls:*)",
+      "Bash(reg query \"HKEY_CURRENT_USER\\\\Software\\\\Google\\\\Chrome\\\\BLBeacon\" /v version)",
+      "Bash(reg query \"HKLM\\\\SOFTWARE\\\\Google\\\\Chrome\\\\BLBeacon\" /v version)",
+      "Bash(\"C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\" --version)",
+      "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\" --version)",
+      "Bash(wmic datafile:*)",
+      "Bash(powershell -Command \"\\(Get-Item ''C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe''\\).VersionInfo.ProductVersion\")"
     ]
   }
 }

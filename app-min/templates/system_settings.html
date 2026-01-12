@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings{% endblock %}
+
+{% block content %}
+        <h1 class="mb-4">System Settings</h1>
+
+        <ul class="nav nav-tabs mb-4" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="email-tab" data-bs-toggle="tab" data-bs-target="#email" type="button" role="tab">Email Settings</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="scheduler-tab" data-bs-toggle="tab" data-bs-target="#scheduler" type="button" role="tab">Scheduler Settings</button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- Email Settings Tab -->
+            <div class="tab-pane fade show active" id="email" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">Email Server Configuration</h5>
+                        <form method="POST" action="{{ url_for('admin.save_system_settings') }}">
+                            <input type="hidden" name="config_type" value="email">
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_server" class="form-label">SMTP Server:</label>
+                                    <input type="text" class="form-control" id="mail_server" name="mail_server"
+                                           value="{{ config.mail_server }}" placeholder="e.g., smtp.gmail.com" required>
+                                    <small class="form-text text-muted">SMTP server address</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_port" class="form-label">SMTP Port:</label>
+                                    <input type="number" class="form-control" id="mail_port" name="mail_port"
+                                           value="{{ config.mail_port }}" placeholder="587" required>
+                                    <small class="form-text text-muted">Usually 587 (TLS) or 465 (SSL)</small>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="mail_use_tls" name="mail_use_tls"
+                                           {% if config.mail_use_tls %}checked{% endif %}>
+                                    <label class="form-check-label" for="mail_use_tls">
+                                        Use TLS (recommended)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_username" class="form-label">Username/Email:</label>
+                                    <input type="text" class="form-control" id="mail_username" name="mail_username"
+                                           value="{{ config.mail_username }}" placeholder="your-email@gmail.com">
+                                    <small class="form-text text-muted">SMTP username (often your email)</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_password" class="form-label">Password/App Password:</label>
+                                    <input type="password" class="form-control" id="mail_password" name="mail_password"
+                                           placeholder="Leave blank to keep existing" autocomplete="new-password">
+                                    <small class="form-text text-muted">SMTP password or app password (encrypted)</small>
+                                </div>
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_from_email" class="form-label">From Email Address:</label>
+                                    <input type="email" class="form-control" id="mail_from_email" name="mail_from_email"
+                                           value="{{ config.mail_from_email }}" placeholder="noreply@example.com">
+                                    <small class="form-text text-muted">Email address shown in "From" field</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="mail_from_name" class="form-label">From Display Name:</label>
+                                    <input type="text" class="form-control" id="mail_from_name" name="mail_from_name"
+                                           value="{{ config.mail_from_name }}" placeholder="Ministering Interview App">
+                                    <small class="form-text text-muted">Display name shown in "From" field</small>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <button type="submit" class="btn btn-primary">Save Email Settings</button>
+                                <a href="{{ url_for('admin.send_test_email') }}" class="btn btn-secondary">Send Test Email</a>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scheduler Settings Tab -->
+            <div class="tab-pane fade" id="scheduler" role="tabpanel">
+                <form method="POST" action="{{ url_for('admin.save_system_settings') }}">
+                    <input type="hidden" name="config_type" value="scheduler">
+
+                    <div class="form-check form-switch mb-4">
+                        <input type="checkbox" class="form-check-input" id="reminder_enabled"
+                               name="reminder_enabled" {% if config.reminder_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="reminder_enabled">
+                            <strong>Enable Automated Reminders</strong>
+                        </label>
+                        <p class="text-muted small ms-4 mb-0">
+                            Automatically send booking reminders to members who haven't scheduled an interview
+                        </p>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="reminder_day_of_week" class="form-label">Day of Week</label>
+                            <select class="form-select" id="reminder_day_of_week" name="reminder_day_of_week" onchange="updateSchedulePreview()">
+                                <option value="0" {% if config.reminder_day_of_week == 0 %}selected{% endif %}>Monday</option>
+                                <option value="1" {% if config.reminder_day_of_week == 1 %}selected{% endif %}>Tuesday</option>
+                                <option value="2" {% if config.reminder_day_of_week == 2 %}selected{% endif %}>Wednesday</option>
+                                <option value="3" {% if config.reminder_day_of_week == 3 %}selected{% endif %}>Thursday</option>
+                                <option value="4" {% if config.reminder_day_of_week == 4 %}selected{% endif %}>Friday</option>
+                                <option value="5" {% if config.reminder_day_of_week == 5 %}selected{% endif %}>Saturday</option>
+                                <option value="6" {% if config.reminder_day_of_week == 6 %}selected{% endif %}>Sunday</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="reminder_hour" class="form-label">Hour</label>
+                            <select class="form-select" id="reminder_hour" name="reminder_hour" onchange="updateSchedulePreview()">
+                                {% for h in range(24) %}
+                                <option value="{{ h }}" {% if config.reminder_hour == h %}selected{% endif %}>
+                                    {{ h if h > 0 else 12 }}:00 {{ 'AM' if h < 12 else 'PM' }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="reminder_minute" class="form-label">Minute</label>
+                            <select class="form-select" id="reminder_minute" name="reminder_minute" onchange="updateSchedulePreview()">
+                                <option value="0" {% if config.reminder_minute == 0 %}selected{% endif %}>:00</option>
+                                <option value="15" {% if config.reminder_minute == 15 %}selected{% endif %}>:15</option>
+                                <option value="30" {% if config.reminder_minute == 30 %}selected{% endif %}>:30</option>
+                                <option value="45" {% if config.reminder_minute == 45 %}selected{% endif %}>:45</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info" id="schedule-preview">
+                        <strong>Schedule Preview:</strong>
+                        <span id="preview-text"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Save Scheduler Settings</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Security Notice -->
+        <div class="alert alert-warning mt-4">
+            <strong>Security Note:</strong>
+            <p class="mb-0">
+                All sensitive credentials (passwords, tokens, API keys) are encrypted before being stored in the database.
+                Password fields show as blanks for security - they only need to be filled when changing them.
+            </p>
+        </div>
+
+<script>
+// Activate tab based on URL hash
+function activateTabFromHash() {
+    const hash = window.location.hash.substring(1);
+    if (hash) {
+        const tabMap = {
+            'email': 'email-tab',
+            'scheduler': 'scheduler-tab'
+        };
+
+        const tabId = tabMap[hash];
+        if (tabId) {
+            const tabElement = document.getElementById(tabId);
+            if (tabElement) {
+                const tab = new bootstrap.Tab(tabElement);
+                tab.show();
+            }
+        }
+    }
+}
+
+// Call on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateSchedulePreview();
+    activateTabFromHash();
+});
+
+// Update schedule preview when dropdown values change
+function updateSchedulePreview() {
+    const enabled = document.getElementById('reminder_enabled');
+    if (!enabled) return;
+
+    const isEnabled = enabled.checked;
+    const dayOfWeek = parseInt(document.getElementById('reminder_day_of_week').value);
+    const hour = parseInt(document.getElementById('reminder_hour').value);
+    const minute = parseInt(document.getElementById('reminder_minute').value);
+
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour === 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    const displayMinute = minute.toString().padStart(2, '0');
+
+    const previewText = document.getElementById('preview-text');
+    if (previewText) {
+        if (isEnabled) {
+            previewText.textContent = `Reminders will be sent every ${days[dayOfWeek]} at ${displayHour}:${displayMinute} ${ampm}`;
+        } else {
+            previewText.textContent = 'Automated reminders are currently disabled';
+        }
+    }
+}
+</script>
+{% endblock %}

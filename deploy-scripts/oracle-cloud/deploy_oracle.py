@@ -2,13 +2,15 @@
 """
 Oracle Cloud Deployment Script for Ministering Interviews App
 
-Deploys the application to an Oracle Cloud VM using SSH.
+Deploys the application directly with Python (no containers, no git).
+Copies files via SFTP - ideal for low-memory VMs where git/dnf get OOM killed.
 Reads configuration from oracle_config.yaml with interactive prompts.
 """
 
 import os
 import sys
 import secrets
+import time
 from pathlib import Path
 
 try:
@@ -25,6 +27,44 @@ except ImportError:
 
 
 CONFIG_FILE = Path(__file__).parent / "oracle_config.yaml"
+PROJECT_ROOT = Path(__file__).parent.parent.parent / "app-min"  # Points to app-min folder
+
+# Files to copy to the server (relative to PROJECT_ROOT)
+APP_FILES = [
+    "app.py",
+    "config.py",
+    "models.py",
+    "requirements.txt",
+    "routes_admin.py",
+    "routes_api.py",
+    "routes_public.py",
+    "services.py",
+    "shared.py",
+]
+
+# Directories to copy (relative to PROJECT_ROOT)
+APP_DIRS = [
+    "templates",
+    "utils",
+]
+
+SYSTEMD_SERVICE = """[Unit]
+Description=Ministering Interviews Flask App
+After=network.target
+
+[Service]
+User={user}
+WorkingDirectory={app_dir}
+Environment="PATH={app_dir}/venv/bin:/usr/local/bin:/usr/bin"
+Environment="SECRET_KEY={secret_key}"
+Environment="PORT={port}"
+ExecStart={app_dir}/venv/bin/gunicorn --bind 0.0.0.0:{port} --workers 2 --timeout 120 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+"""
 
 
 def load_config():
@@ -73,7 +113,6 @@ def get_config_interactive():
 
     # Ensure nested dicts exist
     config.setdefault("oracle", {})
-    config.setdefault("git", {})
     config.setdefault("app", {})
     config.setdefault("deploy", {})
 
@@ -105,23 +144,11 @@ def get_config_interactive():
             config["oracle"]["ssh_key_path"]
         )
 
-    # Git settings
-    print("\n-- Git Repository --")
-    config["git"]["repo_url"] = prompt(
-        "Git repository URL",
-        config["git"].get("repo_url", "https://github.com/YOUR_USERNAME/Ministering-Interviews.git")
-    )
-
-    config["git"]["branch"] = prompt(
-        "Branch to deploy",
-        config["git"].get("branch", "main")
-    )
-
     # App settings
     print("\n-- Application Settings --")
     config["app"]["port"] = int(prompt(
         "Application port",
-        str(config["app"].get("port", 8181))
+        str(config["app"].get("port", 80))
     ))
 
     default_secret = config["app"].get("secret_key", "")
@@ -139,9 +166,9 @@ def get_config_interactive():
 
     # Deployment options
     print("\n-- Deployment Options --")
-    config["deploy"]["install_docker"] = prompt_yes_no(
-        "Install Docker if not present?",
-        config["deploy"].get("install_docker", True)
+    config["deploy"]["clean_first"] = prompt_yes_no(
+        "Clean existing deployment first? (removes venv, old files)",
+        config["deploy"].get("clean_first", True)
     )
 
     config["deploy"]["configure_firewall"] = prompt_yes_no(
@@ -195,53 +222,70 @@ def create_ssh_client(config):
 
 
 def run_command(client, command, description=None, check=True):
-    """Run a command via SSH and return output."""
+    """Run a command via SSH with real-time output streaming."""
     if description:
         print(f"\n>> {description}")
     print(f"   $ {command}")
 
-    stdin, stdout, stderr = client.exec_command(command)
-    exit_code = stdout.channel.recv_exit_status()
+    # Get the transport and open a channel
+    transport = client.get_transport()
+    channel = transport.open_session()
+    channel.get_pty()  # Request PTY to force unbuffered output
+    channel.set_combine_stderr(True)  # Combine stdout and stderr
+    channel.exec_command(command)
 
-    output = stdout.read().decode("utf-8").strip()
-    error = stderr.read().decode("utf-8").strip()
+    output_lines = []
+    last_output_time = time.time()
+    dots_printed = 0
 
-    if output:
-        for line in output.split("\n"):
-            print(f"   {line}")
+    # Stream output in real-time
+    while True:
+        # Check if there's data to read
+        if channel.recv_ready():
+            data = channel.recv(4096).decode("utf-8", errors="replace")
+            if data:
+                # Clear dots line if we printed any
+                if dots_printed > 0:
+                    print()
+                    dots_printed = 0
+                for line in data.splitlines():
+                    print(f"   {line}")
+                    output_lines.append(line)
+                last_output_time = time.time()
 
-    if error and exit_code != 0:
-        for line in error.split("\n"):
-            print(f"   [ERR] {line}")
+        # Check if the command has finished
+        if channel.exit_status_ready():
+            # Read any remaining data
+            while channel.recv_ready():
+                data = channel.recv(4096).decode("utf-8", errors="replace")
+                if data:
+                    if dots_printed > 0:
+                        print()
+                        dots_printed = 0
+                    for line in data.splitlines():
+                        print(f"   {line}")
+                        output_lines.append(line)
+            break
+
+        # Print dots every 5 seconds to show it's working
+        if time.time() - last_output_time > 5:
+            print(".", end="", flush=True)
+            dots_printed += 1
+            last_output_time = time.time()
+
+        # Small sleep to prevent CPU spinning
+        time.sleep(0.1)
+
+    exit_code = channel.recv_exit_status()
+    channel.close()
+
+    output = "\n".join(output_lines)
 
     if check and exit_code != 0:
         print(f"   Command failed with exit code {exit_code}")
-        return None
+        raise RuntimeError(f"Command failed: {command}")
 
     return output
-
-
-def check_docker_installed(client):
-    """Check if Docker is installed."""
-    result = run_command(client, "which docker", "Checking for Docker...", check=False)
-    return result is not None and result != ""
-
-
-def install_docker(client):
-    """Install Docker on Oracle Linux."""
-    commands = [
-        ("sudo yum install -y yum-utils", "Installing yum-utils..."),
-        ("sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo", "Adding Docker repo..."),
-        ("sudo yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin", "Installing Docker..."),
-        ("sudo systemctl enable docker", "Enabling Docker service..."),
-        ("sudo systemctl start docker", "Starting Docker service..."),
-        ("sudo usermod -aG docker $USER", "Adding user to docker group..."),
-    ]
-
-    for cmd, desc in commands:
-        run_command(client, cmd, desc)
-
-    print("\nDocker installed. Note: You may need to reconnect for group changes.")
 
 
 def configure_firewall(client, port):
@@ -258,132 +302,393 @@ def add_swap(client, size_mb):
     """Add swap space."""
     # Check if swap already exists
     result = run_command(client, "swapon --show", "Checking existing swap...", check=False)
-    if result:
+    if result and result.strip():
         print("   Swap already configured, skipping.")
         return
 
-    commands = [
-        (f"sudo dd if=/dev/zero of=/swapfile bs=1M count={size_mb}", f"Creating {size_mb}MB swap file..."),
-        ("sudo chmod 600 /swapfile", "Setting swap file permissions..."),
-        ("sudo mkswap /swapfile", "Formatting swap..."),
-        ("sudo swapon /swapfile", "Enabling swap..."),
-        ("echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab", "Adding swap to fstab..."),
-    ]
+    print(f"\n>> Creating {size_mb}MB swap file (this may take a minute)...")
 
-    for cmd, desc in commands:
-        run_command(client, cmd, desc)
+    run_command(
+        client,
+        f"sudo dd if=/dev/zero of=/swapfile bs=1M count={size_mb} status=progress",
+        f"Creating {size_mb}MB swap file..."
+    )
+    run_command(client, "sudo chmod 600 /swapfile", "Setting swap file permissions...")
+    run_command(client, "sudo mkswap /swapfile", "Formatting swap...")
+    run_command(client, "sudo swapon /swapfile", "Enabling swap...")
+    run_command(
+        client,
+        "grep -q swapfile /etc/fstab || echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab",
+        "Adding swap to fstab..."
+    )
+    run_command(client, "free -h", "Memory status:")
+
+
+def clean_environment(client, app_dir):
+    """Clean out existing deployment - stop service, remove venv and files."""
+    print(f"\n>> Cleaning existing deployment at {app_dir}...")
+
+    # Stop the service if running
+    run_command(
+        client,
+        "sudo systemctl stop ministering",
+        "Stopping ministering service...",
+        check=False
+    )
+
+    # Remove the virtual environment
+    run_command(
+        client,
+        f"rm -rf {app_dir}/venv",
+        "Removing virtual environment...",
+        check=False
+    )
+
+    # Remove Python cache files
+    run_command(
+        client,
+        f"find {app_dir} -type d -name '__pycache__' -exec rm -rf {{}} + 2>/dev/null || true",
+        "Removing Python cache...",
+        check=False
+    )
+
+    # Remove all .py files (will be re-uploaded)
+    run_command(
+        client,
+        f"rm -f {app_dir}/*.py",
+        "Removing old Python files...",
+        check=False
+    )
+
+    # Remove templates and utils (will be re-uploaded)
+    run_command(
+        client,
+        f"rm -rf {app_dir}/templates {app_dir}/utils",
+        "Removing old templates and utils...",
+        check=False
+    )
+
+    print("   Cleanup complete!")
+
+
+def install_dependencies(client):
+    """Install Python and system dependencies."""
+    # Check Python version
+    run_command(client, "python3 --version", "Checking Python version...")
+
+    # Check if pip is already installed
+    result = run_command(
+        client,
+        "python3 -m pip --version",
+        "Checking if pip is installed...",
+        check=False
+    )
+
+    if "pip" in result.lower():
+        print("   pip is already installed, skipping.")
+    else:
+        # Install pip using curl (dnf gets OOM killed on low-memory VMs)
+        print("   pip not found, installing via curl...")
+        run_command(
+            client,
+            "curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py",
+            "Downloading get-pip.py..."
+        )
+        run_command(
+            client,
+            "python3 /tmp/get-pip.py --user",
+            "Installing pip..."
+        )
+        run_command(
+            client,
+            "rm /tmp/get-pip.py",
+            "Cleaning up...",
+            check=False
+        )
+
+
+def upload_files(client, app_dir):
+    """Upload application files via SFTP."""
+    print(f"\n>> Uploading application files to {app_dir}...")
+
+    sftp = client.open_sftp()
+
+    try:
+        # Create app directory if it doesn't exist
+        try:
+            sftp.stat(app_dir)
+        except FileNotFoundError:
+            print(f"   Creating directory {app_dir}")
+            sftp.mkdir(app_dir)
+
+        # Upload individual files
+        for filename in APP_FILES:
+            local_path = PROJECT_ROOT / filename
+            remote_path = f"{app_dir}/{filename}"
+
+            if local_path.exists():
+                print(f"   Uploading {filename}...")
+                sftp.put(str(local_path), remote_path)
+            else:
+                print(f"   Warning: {filename} not found locally, skipping")
+
+        # Upload directories
+        for dirname in APP_DIRS:
+            local_dir = PROJECT_ROOT / dirname
+            remote_dir = f"{app_dir}/{dirname}"
+
+            if local_dir.exists() and local_dir.is_dir():
+                # Create remote directory
+                try:
+                    sftp.stat(remote_dir)
+                except FileNotFoundError:
+                    print(f"   Creating directory {dirname}/")
+                    sftp.mkdir(remote_dir)
+
+                # Upload all files in directory
+                for item in local_dir.iterdir():
+                    if item.is_file():
+                        remote_file = f"{remote_dir}/{item.name}"
+                        print(f"   Uploading {dirname}/{item.name}...")
+                        sftp.put(str(item), remote_file)
+                    elif item.is_dir():
+                        # Handle subdirectories (one level deep)
+                        sub_remote_dir = f"{remote_dir}/{item.name}"
+                        try:
+                            sftp.stat(sub_remote_dir)
+                        except FileNotFoundError:
+                            sftp.mkdir(sub_remote_dir)
+                        for subitem in item.iterdir():
+                            if subitem.is_file():
+                                print(f"   Uploading {dirname}/{item.name}/{subitem.name}...")
+                                sftp.put(str(subitem), f"{sub_remote_dir}/{subitem.name}")
+
+        print("   File upload complete!")
+
+    finally:
+        sftp.close()
 
 
 def deploy_app(client, config):
     """Deploy the application."""
     app_dir = config["app"]["app_dir"]
-    repo_url = config["git"]["repo_url"]
-    branch = config["git"]["branch"]
     port = config["app"]["port"]
     secret_key = config["app"]["secret_key"]
+    user = config["oracle"]["ssh_user"]
 
-    # Check if app directory exists
-    result = run_command(client, f"test -d {app_dir} && echo 'exists'", "Checking if app exists...", check=False)
+    # Upload files via SFTP
+    upload_files(client, app_dir)
 
-    if result == "exists":
-        # Update existing deployment
-        print("\nApp directory exists. Updating...")
-        run_command(client, f"cd {app_dir} && git fetch origin", "Fetching updates...")
-        run_command(client, f"cd {app_dir} && git checkout {branch}", f"Checking out {branch}...")
-        run_command(client, f"cd {app_dir} && git pull origin {branch}", "Pulling latest changes...")
-    else:
-        # Fresh clone
-        run_command(client, f"git clone -b {branch} {repo_url} {app_dir}", "Cloning repository...")
-
-    # Create .env file
-    env_content = f"SECRET_KEY={secret_key}\\nPORT={port}"
+    # Create virtual environment
     run_command(
         client,
-        f"echo -e '{env_content}' > {app_dir}/.env",
-        "Creating .env file..."
+        f"cd {app_dir} && python3 -m venv venv",
+        "Creating virtual environment..."
     )
 
-    # Build and start with Docker Compose
-    # Use 'sg docker' to run with docker group permissions in same session
+    # Install requirements
     run_command(
         client,
-        f"cd {app_dir} && sg docker -c 'docker compose down 2>/dev/null; docker compose up -d --build'",
-        "Building and starting Docker containers..."
+        f"cd {app_dir} && ./venv/bin/pip install --upgrade pip",
+        "Upgrading pip..."
+    )
+    run_command(
+        client,
+        f"cd {app_dir} && ./venv/bin/pip install -r requirements.txt",
+        "Installing Python dependencies..."
     )
 
-    # Show status
+    # Install gunicorn if not in requirements
     run_command(
         client,
-        f"cd {app_dir} && sg docker -c 'docker compose ps'",
-        "Container status:"
+        f"cd {app_dir} && ./venv/bin/pip install gunicorn",
+        "Installing gunicorn..."
     )
+
+    # Fix permissions on venv binaries (needed for systemd to execute)
+    run_command(
+        client,
+        f"chmod +x {app_dir}/venv/bin/*",
+        "Setting executable permissions on venv binaries..."
+    )
+
+    # Ensure opc owns everything
+    run_command(
+        client,
+        f"sudo chown -R {user}:{user} {app_dir}",
+        "Setting ownership..."
+    )
+
+    # Grant Python capability to bind to privileged ports (needed for port 80)
+    run_command(
+        client,
+        "sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.9",
+        "Granting Python capability to bind to port 80...",
+        check=False  # Don't fail if Python version differs
+    )
+
+    # Create instance directory
+    run_command(client, f"mkdir -p {app_dir}/instance", "Creating instance directory...")
+
+    # Create systemd service file
+    service_content = SYSTEMD_SERVICE.format(
+        user=user,
+        app_dir=app_dir,
+        secret_key=secret_key,
+        port=port
+    )
+
+    # Write service file (escape for shell)
+    escaped_content = service_content.replace("'", "'\\''")
+    run_command(
+        client,
+        f"echo '{escaped_content}' | sudo tee /etc/systemd/system/ministering.service > /dev/null",
+        "Creating systemd service file..."
+    )
+
+    # Reload systemd and start service
+    run_command(client, "sudo systemctl daemon-reload", "Reloading systemd...")
+    run_command(client, "sudo systemctl enable ministering", "Enabling service on boot...")
+    run_command(client, "sudo systemctl restart ministering", "Starting application...")
+
+    # Check status
+    run_command(client, "sudo systemctl status ministering --no-pager", "Service status:")
+
+
+def quick_deploy(client, config):
+    """Quick deploy - just upload files and restart service."""
+    app_dir = config["app"]["app_dir"]
+
+    print("\n" + "=" * 60)
+    print("  Quick Deploy - Upload files and restart")
+    print("=" * 60)
+
+    # Upload files via SFTP
+    upload_files(client, app_dir)
+
+    # Restart service
+    run_command(client, "sudo systemctl restart ministering", "Restarting application...")
+
+    # Check status
+    run_command(client, "sudo systemctl status ministering --no-pager", "Service status:")
+
+    print("\n" + "=" * 60)
+    print("  Quick Deploy Complete!")
+    print("=" * 60)
+    print(f"\nYour app should be available at:")
+    print(f"  http://{config['oracle']['vm_ip']}")
+    print()
 
 
 def main():
     """Main deployment function."""
     print("\n" + "=" * 60)
     print("  Ministering Interviews - Oracle Cloud Deployment")
+    print("  (Minimal version - no scraping, no SMS)")
+    print("  (Direct SFTP upload - no git, no containers)")
     print("=" * 60)
 
-    # Get configuration
-    config = get_config_interactive()
+    # Check for existing config for quick deploy option
+    config = load_config()
+    quick_mode = False
+
+    if config.get("oracle", {}).get("vm_ip") and config.get("oracle", {}).get("ssh_key_path"):
+        print(f"\nExisting config found for: {config['oracle'].get('vm_ip')}")
+        print("\nDeploy options:")
+        print("  1. Quick deploy (upload files + restart only)")
+        print("  2. Full deploy (clean, setup venv, install deps, etc.)")
+        print("  3. Reconfigure settings")
+
+        choice = input("\nSelect option [1]: ").strip() or "1"
+
+        if choice == "1":
+            quick_mode = True
+        elif choice == "3":
+            config = get_config_interactive()
+        # else choice == "2", do full deploy with existing config
+    else:
+        # No existing config, go through interactive setup
+        config = get_config_interactive()
 
     # Validate required fields
-    if not config["oracle"]["vm_ip"]:
+    if not config.get("oracle", {}).get("vm_ip"):
         print("\nError: VM IP address is required.")
         sys.exit(1)
 
-    if not config["oracle"]["ssh_key_path"]:
+    if not config.get("oracle", {}).get("ssh_key_path"):
         print("\nError: SSH key path is required.")
         sys.exit(1)
 
-    if not os.path.exists(config["oracle"]["ssh_key_path"]):
-        print(f"\nError: SSH key not found at {config['oracle']['ssh_key_path']}")
+    ssh_key_path = os.path.expanduser(config["oracle"]["ssh_key_path"])
+    if not os.path.exists(ssh_key_path):
+        print(f"\nError: SSH key not found at {ssh_key_path}")
         sys.exit(1)
-
-    # Confirm deployment
-    print("\n" + "=" * 60)
-    print("Ready to deploy with the following settings:")
-    print(f"  VM: {config['oracle']['ssh_user']}@{config['oracle']['vm_ip']}")
-    print(f"  Repo: {config['git']['repo_url']} ({config['git']['branch']})")
-    print(f"  Port: {config['app']['port']}")
-    print("=" * 60)
-
-    if not prompt_yes_no("\nProceed with deployment?", True):
-        print("Deployment cancelled.")
-        sys.exit(0)
+    config["oracle"]["ssh_key_path"] = ssh_key_path
 
     # Connect via SSH
     client = create_ssh_client(config)
 
     try:
-        # Install Docker if needed
-        if config["deploy"]["install_docker"]:
-            if not check_docker_installed(client):
-                install_docker(client)
-            else:
-                print("\nDocker already installed.")
+        if quick_mode:
+            # Quick deploy - just upload and restart
+            quick_deploy(client, config)
+        else:
+            # Full deploy
+            # Confirm deployment
+            print("\n" + "=" * 60)
+            print("Ready for FULL deploy with the following settings:")
+            print(f"  VM: {config['oracle']['ssh_user']}@{config['oracle']['vm_ip']}")
+            print(f"  Source: {PROJECT_ROOT} (app-min)")
+            print(f"  Remote dir: {config['app']['app_dir']}")
+            print(f"  Port: {config['app']['port']}")
+            print(f"  Clean first: {config['deploy'].get('clean_first', True)}")
+            print("=" * 60)
 
-        # Configure firewall
-        if config["deploy"]["configure_firewall"]:
-            configure_firewall(client, config["app"]["port"])
+            if not prompt_yes_no("\nProceed with full deployment?", True):
+                print("Deployment cancelled.")
+                sys.exit(0)
 
-        # Add swap
-        if config["deploy"]["add_swap"]:
-            add_swap(client, config["deploy"]["swap_size_mb"])
+            # Clean existing deployment if requested
+            if config["deploy"].get("clean_first", True):
+                clean_environment(client, config["app"]["app_dir"])
 
-        # Deploy the app
-        deploy_app(client, config)
+            # Add swap first (helps with memory during installs)
+            if config["deploy"].get("add_swap"):
+                add_swap(client, config["deploy"]["swap_size_mb"])
 
-        # Final message
-        print("\n" + "=" * 60)
-        print("  Deployment Complete!")
-        print("=" * 60)
-        print(f"\nYour app should be available at:")
-        print(f"  http://{config['oracle']['vm_ip']}:{config['app']['port']}")
-        print(f"\nTo view logs, SSH in and run:")
-        print(f"  cd {config['app']['app_dir']} && docker compose logs -f")
-        print()
+            # Install system dependencies
+            install_dependencies(client)
+
+            # Configure firewall
+            if config["deploy"].get("configure_firewall"):
+                configure_firewall(client, config["app"]["port"])
+
+            # Deploy the app
+            deploy_app(client, config)
+
+            # Final message
+            print("\n" + "=" * 60)
+            print("  Deployment Complete!")
+            print("=" * 60)
+            print(f"\nYour app should be available at:")
+            print(f"  http://{config['oracle']['vm_ip']}")
+            print(f"\nUseful commands (SSH into server first):")
+            print(f"  sudo systemctl status ministering   # Check status")
+            print(f"  sudo systemctl restart ministering  # Restart app")
+            print(f"  sudo journalctl -u ministering -f   # View logs")
+            print()
+
+    except RuntimeError as e:
+        print(f"\n{'=' * 60}")
+        print(f"  Deployment FAILED!")
+        print(f"{'=' * 60}")
+        print(f"\nError: {e}")
+        print("\nThis may be due to:")
+        print("  - SSH connection dropped (exit code -1)")
+        print("  - Server ran out of memory")
+        print("  - Network timeout")
+        print("\nTry: Reboot the VM and run the script again.")
+        sys.exit(1)
 
     finally:
         client.close()

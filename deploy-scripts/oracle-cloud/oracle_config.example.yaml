@@ -34,7 +34,7 @@ git:
 
 # Application Settings
 app:
-  # Port to expose externally (mapped to internal 8181)
+  # Port to expose externally
   port: 80
 
   # Secret key for Flask sessions (leave empty to auto-generate)
@@ -45,8 +45,8 @@ app:
 
 # Deployment Options
 deploy:
-  # Install Docker if not present
-  install_docker: true
+  # Install Podman if not present (lightweight alternative to Docker)
+  install_podman: true
 
   # Open firewall port
   configure_firewall: true

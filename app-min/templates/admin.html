@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Districts{% endblock %}
+
+{% block content %}
+        <h1 class="mb-4">Manage Districts</h1>
+        <a href="{{ url_for('admin.new_district') }}" class="btn btn-primary mb-3">Create New District</a>
+        
+        <h2>Districts</h2>
+        <ul class="list-group">
+        {% for district in districts %}
+            <li class="list-group-item"><a href="{{ url_for('admin.district_detail', id=district.id) }}">{{ district.name }} - {{ district.interviewer_name }}</a></li>
+        {% endfor %}
+        </ul>
+    </div>
+{% endblock %}
