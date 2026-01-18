@@ -13,8 +13,9 @@ import uuid
 import threading
 import io
 import csv
+import re
 
-from models import db, User, UserInvitation, SystemConfig, District, Companionship, Member, InterviewSlot, Booking, NotificationLog
+from models import db, User, UserInvitation, SystemConfig, District, Companionship, Member, InterviewSlot, Booking, NotificationLog, MessageTemplates
 from utils import admin_required, group_results_by_district
 from shared import mail, progress_store, progress_lock
 import services
@@ -679,30 +680,15 @@ def send_notifications(district_id):
             # Send email
             if member.email:
                 try:
+                    # Use message templates for formatting
+                    subject, body = services.format_email_notification(member, link, current_quarter, current_year)
                     msg = Message(
-                        f'Interview Scheduling Available for Q{current_quarter} {current_year}',
+                        subject,
                         sender=sender_email,
                         recipients=[member.email]
                     )
-                    msg.body = f'''Dear {member.name},
-
-Interview slots are now available for the current quarter (Q{current_quarter} {current_year}).
-
-Please visit the following link to schedule your interview:
-
-{link}
-
-If you have any questions, please contact your district interviewer.
-
-Thank you,
-Ministering Interview App
-'''
-                    msg.html = f'''<p>Dear {member.name},</p>
-<p>Interview slots are now available for the current quarter (Q{current_quarter} {current_year}).</p>
-<p><a href="{link}">Click here to schedule your interview</a></p>
-<p>If you have any questions, please contact your district interviewer.</p>
-<p>Thank you,<br>Ministering Interview App</p>
-'''
+                    msg.html = body
+                    msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
                     mail.send(msg)
                     sent_count += 1
                 except Exception as e:
@@ -744,9 +730,11 @@ def send_individual_notification(member_id):
     # Send email
     if member.email:
         try:
-            msg = Message('Ministering Interview', sender=sender_email,
-                        recipients=[member.email])
-            msg.body = f'Please schedule your interview: {link}'
+            # Use message templates for formatting
+            subject, body = services.format_email_notification(member, link, current_quarter, current_year)
+            msg = Message(subject, sender=sender_email, recipients=[member.email])
+            msg.html = body
+            msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
             mail.send(msg)
             email_sent = True
 
@@ -842,9 +830,11 @@ def send_all_notifications():
                 # Send email
                 if member.email:
                     try:
-                        msg = Message('Ministering Interview', sender=sender_email,
-                                    recipients=[member.email])
-                        msg.body = f'Please schedule your interview: {link}'
+                        # Use message templates for formatting
+                        subject, body = services.format_email_notification(member, link, current_quarter, current_year)
+                        msg = Message(subject, sender=sender_email, recipients=[member.email])
+                        msg.html = body
+                        msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
                         mail.send(msg)
                         sent_count += 1
                         print(f"✅ Email sent to {member.name} ({member.email})")
@@ -1325,7 +1315,10 @@ def system_settings():
     for key, value in decrypted.items():
         setattr(config_view, key, value)
 
-    return render_template('system_settings.html', config=config_view)
+    # Get message templates
+    msg_config = MessageTemplates.get_or_create()
+
+    return render_template('system_settings.html', config=config_view, msg_config=msg_config)
 
 
 @admin_bp.route('/settings/save', methods=['POST'])
@@ -1399,4 +1392,26 @@ def send_test_email():
         flash(f'Failed to send test email: {str(e)}', 'error')
 
     return redirect(url_for('admin.system_settings') + '#email')
+
+
+@admin_bp.route('/settings/save-messages', methods=['POST'])
+@admin_required
+def save_message_settings():
+    """Save message customization settings"""
+    try:
+        msg_config = MessageTemplates.get_or_create()
+
+        msg_config.organization_name = request.form.get('organization_name', '').strip() or None
+        msg_config.greeting_style = request.form.get('greeting_style', 'Dear')
+        msg_config.custom_instructions = request.form.get('custom_instructions', '').strip() or None
+        msg_config.signature_name = request.form.get('signature_name', '').strip() or None
+        msg_config.signature_title = request.form.get('signature_title', '').strip() or None
+
+        db.session.commit()
+        flash('Message settings saved successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error saving message settings: {str(e)}', 'error')
+
+    return redirect(url_for('admin.system_settings') + '#messages')
 

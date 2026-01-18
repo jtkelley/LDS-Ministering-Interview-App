@@ -19,7 +19,9 @@
       "Bash(\"C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\" --version)",
       "Bash(\"C:\\\\Program Files \\(x86\\)\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe\" --version)",
       "Bash(wmic datafile:*)",
-      "Bash(powershell -Command \"\\(Get-Item ''C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe''\\).VersionInfo.ProductVersion\")"
+      "Bash(powershell -Command \"\\(Get-Item ''C:\\\\Program Files\\\\Google\\\\Chrome\\\\Application\\\\chrome.exe''\\).VersionInfo.ProductVersion\")",
+      "Bash(git status:*)",
+      "Bash(git check-ignore:*)"
     ]
   }
 }

@@ -8,8 +8,9 @@ from functools import wraps
 from datetime import datetime, timedelta
 # Password verification done via Flask-User's user_manager
 import jwt
+import re
 
-from models import db, User, Member, District, Companionship, InterviewSlot, Booking, NotificationLog
+from models import db, User, Member, District, Companionship, InterviewSlot, Booking, NotificationLog, MessageTemplates
 from shared import mail
 import services
 
@@ -388,28 +389,11 @@ def send_bulk_email():
         try:
             link = url_for('public.schedule', token=member.token, _external=True)
 
-            msg = Message(
-                f'Ministering Interview Scheduling - Q{quarter} {year}',
-                sender=sender_email,
-                recipients=[member.email]
-            )
-            msg.body = f'''Hi {member.name},
-
-You're invited to schedule your ministering interview for Q{quarter} {year}.
-
-Please use this link to select a time that works for you:
-{link}
-
-If your companion has already booked, you'll see their appointment highlighted so you can join them.
-
-Thank you!
-'''
-            msg.html = f'''<p>Hi {member.name},</p>
-<p>You're invited to schedule your ministering interview for <strong>Q{quarter} {year}</strong>.</p>
-<p><a href="{link}">Click here to select a time that works for you</a></p>
-<p>If your companion has already booked, you'll see their appointment highlighted so you can join them.</p>
-<p>Thank you!</p>
-'''
+            # Use message templates for formatting
+            subject, body = services.format_email_notification(member, link, quarter, year)
+            msg = Message(subject, sender=sender_email, recipients=[member.email])
+            msg.html = body
+            msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
             mail.send(msg)
 
             # Log the notification
@@ -490,4 +474,76 @@ def log_bulk_notifications():
         'success': True,
         'logged': logged_count,
         'message': f'Logged {logged_count} {method.upper()} notifications'
+    })
+
+
+@api_bp.route('/message-templates', methods=['GET'])
+@token_required
+def get_message_templates():
+    """
+    Get message templates for formatting notifications.
+    Returns the customization settings that can be used by mobile apps.
+
+    Templates are partially rendered - settings-based placeholders are filled in,
+    but {name} and {link} remain for the client to substitute.
+    """
+    from models import DEFAULT_SMS, DEFAULT_EMAIL_SUBJECT, DEFAULT_EMAIL_BODY
+
+    msg_config = MessageTemplates.get_or_create()
+    quarter, year = get_current_quarter()
+
+    # Get format helpers from the model
+    org_name = msg_config.format_org_name()
+    greeting = msg_config.format_greeting()
+    instructions = msg_config.format_instructions()
+    signature = msg_config.format_signature()
+
+    # Get stored templates (or defaults)
+    sms_template = msg_config.sms_template or DEFAULT_SMS
+    email_subject = msg_config.email_subject_template or DEFAULT_EMAIL_SUBJECT
+    email_body = msg_config.email_body_template or DEFAULT_EMAIL_BODY
+
+    # Partially render templates - substitute settings, leave {name} and {link}
+    # We need to escape {name} and {link} so they don't get substituted
+    sms_rendered = sms_template.replace('{name}', '{{name}}').replace('{link}', '{{link}}').format(
+        org_name=org_name,
+        greeting=greeting,
+        instructions=instructions
+    ).replace('{{name}}', '{name}').replace('{{link}}', '{link}')
+
+    email_subject_rendered = email_subject.format(
+        org_name=org_name,
+        quarter=quarter,
+        year=year
+    )
+
+    email_body_rendered = email_body.replace('{name}', '{{name}}').replace('{link}', '{{link}}').format(
+        org_name=org_name,
+        greeting=greeting,
+        quarter=quarter,
+        year=year,
+        instructions=instructions,
+        signature=signature
+    ).replace('{{name}}', '{name}').replace('{{link}}', '{link}')
+
+    # Clean up extra blank lines (allow one blank line, collapse multiple)
+    import re
+    sms_rendered = re.sub(r'\n{3,}', '\n\n', sms_rendered).strip()
+    email_body_rendered = re.sub(r'\n{3,}', '\n\n', email_body_rendered).strip()
+
+    return jsonify({
+        'organization_name': msg_config.organization_name or '',
+        'greeting_style': msg_config.greeting_style or 'Dear',
+        'greeting_prefix': greeting,
+        'org_prefix': org_name,
+        'custom_instructions': msg_config.custom_instructions or '',
+        'signature_name': msg_config.signature_name or '',
+        'signature_title': msg_config.signature_title or '',
+        'signature': signature,
+        'quarter': quarter,
+        'year': year,
+        # Partially rendered templates - {name} and {link} remain as placeholders
+        'sms_template': sms_rendered,
+        'email_subject_template': email_subject_rendered,
+        'email_body_template': email_body_rendered
     })

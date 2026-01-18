@@ -1,6 +1,7 @@
 """
 Service functions for email, SMS, and notifications.
 """
+import re
 from flask import url_for, current_app
 from flask_mail import Message
 from datetime import datetime
@@ -147,29 +148,54 @@ def apply_sms_config():
 
 def format_sms_message(link, member=None):
     """
-    Format SMS message based on system configuration
+    Format SMS message based on system configuration and message templates
     Returns formatted message string
     """
-    from models import SystemConfig
+    from models import SystemConfig, MessageTemplates
 
     config = SystemConfig.query.first()
-    if not config:
-        # Fallback if no config
-        return f"Ministering Interview\n\nPlease schedule your interview: {link}"
+    msg_templates = MessageTemplates.get_or_create()
 
-    # Base message
-    message = "Ministering Interview\n\n"
-    message += f"Please schedule your interview: {link}\n\n"
+    # Get member name for greeting
+    member_name = ''
+    if member:
+        # Format name as "First Last" instead of "Last, First"
+        member_name = ' '.join(member.name.split(', ')[::-1]) if ', ' in member.name else member.name
 
-    # Add do-not-reply warning if using 1-way mode
-    if config.sms_mode == 'one_way':
-        message += "Do not reply to this text.\n\n"
+    # Use the message templates if available
+    if msg_templates:
+        message = msg_templates.render_sms(member_name, link)
+    else:
+        # Fallback if no templates
+        message = f"Ministering Interview\n\nPlease schedule your interview: {link}"
+
+    # Add do-not-reply warning and contact info if using 1-way mode
+    if config and config.sms_mode == 'one_way':
+        message += "\n\nDo not reply to this text."
 
         # Add personal contact if enabled
         if config.sms_contact_enabled and config.sms_contact_name and config.sms_contact_phone:
-            message += f"Questions? Call/text {config.sms_contact_name} at {config.sms_contact_phone}"
+            message += f"\nQuestions? Call/text {config.sms_contact_name} at {config.sms_contact_phone}"
 
     return message
+
+
+def format_email_notification(member, link, quarter, year):
+    """
+    Format email notification using message templates
+    Returns (subject, body) tuple
+    """
+    from models import MessageTemplates
+
+    msg_templates = MessageTemplates.get_or_create()
+
+    # Get member name for greeting
+    display_name = ' '.join(member.name.split(', ')[::-1]) if ', ' in member.name else member.name
+
+    subject = msg_templates.render_email_subject(quarter, year)
+    body = msg_templates.render_email_body(display_name, link, quarter, year)
+
+    return subject, body
 
 
 def send_sms(to_number, message):
@@ -305,28 +331,15 @@ def send_booking_reminders():
                 # Send email
                 if member.email:
                     try:
+                        # Use message templates for formatting
+                        subject, body = format_email_notification(member, link, current_quarter, current_year)
                         msg = Message(
-                            f'Reminder: Schedule Your Interview for Q{current_quarter}',
+                            subject,
                             sender=sender_email,
                             recipients=[member.email]
                         )
-                        msg.body = f'''Hello {member.name},
-
-This is a reminder to schedule your ministering interview for Quarter {current_quarter} of {current_year}.
-
-Click the link below to view available times and book your interview:
-{link}
-
-If your companion has already booked, you'll see their appointment highlighted so you can join them.
-
-Thank you!
-'''
-                        msg.html = f'''<p>Hello {member.name},</p>
-<p>This is a reminder to schedule your ministering interview for <strong>Quarter {current_quarter} of {current_year}</strong>.</p>
-<p><a href="{link}">Click here to view available times and book your interview</a></p>
-<p>If your companion has already booked, you'll see their appointment highlighted so you can join them.</p>
-<p>Thank you!</p>
-'''
+                        msg.html = body
+                        msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
                         mail.send(msg)
                         email_sent += 1
                     except Exception as e:

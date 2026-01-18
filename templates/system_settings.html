@@ -15,6 +15,9 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="scheduler-tab" data-bs-toggle="tab" data-bs-target="#scheduler" type="button" role="tab">⏰ Scheduler Settings</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab">✉️ Messages</button>
+            </li>
         </ul>
         
         <div class="tab-content">
@@ -642,6 +645,118 @@
                     <button type="submit" class="btn btn-primary">💾 Save Scheduler Settings</button>
                 </form>
             </div>
+
+            <!-- Messages Tab -->
+            <div class="tab-pane fade" id="messages" role="tabpanel">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title mb-4">Message Customization</h5>
+                        <p class="text-muted mb-4">Customize how notifications appear in emails, SMS, and on the booking page.</p>
+
+                        <form method="POST" action="{{ url_for('admin.save_message_settings') }}">
+                            <div class="row">
+                                <div class="col-lg-6">
+                                    <!-- Organization Name -->
+                                    <div class="mb-3">
+                                        <label for="organization_name" class="form-label">Organization Name (optional)</label>
+                                        <input type="text" class="form-control" id="organization_name" name="organization_name"
+                                               value="{{ msg_config.organization_name or '' }}"
+                                               placeholder="e.g., Lehi 7th Elders Quorum"
+                                               maxlength="100"
+                                               onkeyup="updateMessagePreview()">
+                                        <small class="form-text text-muted">Appears at the start of email subjects</small>
+                                    </div>
+
+                                    <!-- Greeting Style -->
+                                    <div class="mb-3">
+                                        <label for="greeting_style" class="form-label">Greeting Style</label>
+                                        <select class="form-select" id="greeting_style" name="greeting_style" onchange="updateMessagePreview()">
+                                            <option value="None" {% if msg_config.greeting_style == 'None' %}selected{% endif %}>None</option>
+                                            <option value="Dear" {% if msg_config.greeting_style == 'Dear' or not msg_config.greeting_style %}selected{% endif %}>Dear</option>
+                                            <option value="Hi" {% if msg_config.greeting_style == 'Hi' %}selected{% endif %}>Hi</option>
+                                            <option value="Hello" {% if msg_config.greeting_style == 'Hello' %}selected{% endif %}>Hello</option>
+                                            <option value="Brother" {% if msg_config.greeting_style == 'Brother' %}selected{% endif %}>Brother</option>
+                                            <option value="Sister" {% if msg_config.greeting_style == 'Sister' %}selected{% endif %}>Sister</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Custom Instructions -->
+                                    <div class="mb-3">
+                                        <label for="custom_instructions" class="form-label">Custom Instructions (optional)</label>
+                                        <textarea class="form-control" id="custom_instructions" name="custom_instructions"
+                                                  rows="3" maxlength="500"
+                                                  placeholder="e.g., Meet in the east foyer for in-person interviews. Contact me at 801-555-1234 if you have questions."
+                                                  onkeyup="updateMessagePreview(); updateCharCount()">{{ msg_config.custom_instructions or '' }}</textarea>
+                                        <small class="form-text text-muted">
+                                            <span id="char_count">0</span>/500 characters.
+                                            Shown in emails, SMS, and on the booking page.
+                                        </small>
+                                    </div>
+
+                                    <!-- Signature Name -->
+                                    <div class="mb-3">
+                                        <label for="signature_name" class="form-label">Signature Name</label>
+                                        <input type="text" class="form-control" id="signature_name" name="signature_name"
+                                               value="{{ msg_config.signature_name or '' }}"
+                                               placeholder="e.g., John Smith"
+                                               maxlength="100"
+                                               onkeyup="updateMessagePreview()">
+                                    </div>
+
+                                    <!-- Signature Title -->
+                                    <div class="mb-3">
+                                        <label for="signature_title" class="form-label">Signature Title</label>
+                                        <input type="text" class="form-control" id="signature_title" name="signature_title"
+                                               value="{{ msg_config.signature_title or '' }}"
+                                               placeholder="e.g., Elders Quorum President"
+                                               maxlength="100"
+                                               onkeyup="updateMessagePreview()">
+                                    </div>
+
+                                    <button type="submit" class="btn btn-primary">💾 Save Message Settings</button>
+                                </div>
+
+                                <!-- Live Preview -->
+                                <div class="col-lg-6">
+                                    <div class="card bg-light">
+                                        <div class="card-header">
+                                            <strong>📧 Email Preview</strong>
+                                        </div>
+                                        <div class="card-body" style="font-family: monospace; font-size: 13px;">
+                                            <div class="mb-2">
+                                                <strong>Subject:</strong> <span id="preview_subject">Ministering Interview - Q1 2026</span>
+                                            </div>
+                                            <hr>
+                                            <pre id="preview_body" style="white-space: pre-wrap; margin: 0; font-family: inherit;">Dear John Smith,
+
+Interview slots are now available for the current quarter (Q1 2026).
+
+Please click the link below to schedule your interview:
+
+https://example.com/schedule/abc123
+
+Thank you,</pre>
+                                        </div>
+                                    </div>
+
+                                    <div class="card bg-light mt-3">
+                                        <div class="card-header">
+                                            <strong>📱 SMS Preview</strong>
+                                        </div>
+                                        <div class="card-body" style="font-family: monospace; font-size: 13px;">
+                                            <pre id="preview_sms" style="white-space: pre-wrap; margin: 0; font-family: inherit;">Ministering Interview
+Dear John Smith, schedule your interview: https://example.com/schedule/abc123</pre>
+                                            <small class="text-muted mt-2 d-block">
+                                                <span id="sms_char_count">0</span> characters
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Security Notice -->
@@ -719,7 +834,8 @@ function activateTabFromHash() {
         const tabMap = {
             'email': 'email-tab',
             'sms': 'sms-tab',
-            'scheduler': 'scheduler-tab'
+            'scheduler': 'scheduler-tab',
+            'messages': 'messages-tab'
         };
 
         const tabId = tabMap[hash];
@@ -733,6 +849,78 @@ function activateTabFromHash() {
     }
 }
 
+// Message Preview Functions
+function updateCharCount() {
+    const textarea = document.getElementById('custom_instructions');
+    const charCount = document.getElementById('char_count');
+    if (textarea && charCount) {
+        charCount.textContent = textarea.value.length;
+    }
+}
+
+function updateMessagePreview() {
+    const orgName = document.getElementById('organization_name')?.value || '';
+    const greetingStyle = document.getElementById('greeting_style')?.value || 'Dear';
+    const customInstructions = document.getElementById('custom_instructions')?.value || '';
+    const signatureName = document.getElementById('signature_name')?.value || '';
+    const signatureTitle = document.getElementById('signature_title')?.value || '';
+
+    const sampleName = 'John Smith';
+    const sampleLink = 'https://example.com/schedule/abc123';
+    const quarter = 'Q1';
+    const year = '2026';
+
+    // Format org name for subject
+    const orgPrefix = orgName ? orgName + ' - ' : '';
+
+    // Format greeting
+    const greeting = (greetingStyle && greetingStyle !== 'None') ? greetingStyle + ' ' : '';
+
+    // Format signature
+    let signature = '';
+    if (signatureName) signature += signatureName;
+    if (signatureTitle) signature += (signature ? '\n' : '') + signatureTitle;
+
+    // Update email subject preview
+    const subjectEl = document.getElementById('preview_subject');
+    if (subjectEl) {
+        subjectEl.textContent = `${orgPrefix}Ministering Interview - ${quarter} ${year}`;
+    }
+
+    // Update email body preview
+    const bodyEl = document.getElementById('preview_body');
+    if (bodyEl) {
+        let body = `${greeting}${sampleName},\n\n`;
+        body += `Interview slots are now available for the current quarter (${quarter} ${year}).\n\n`;
+        body += `Please click the link below to schedule your interview:\n\n`;
+        body += `${sampleLink}\n\n`;
+        if (customInstructions) {
+            body += `${customInstructions}\n\n`;
+        }
+        body += `Thank you,`;
+        if (signature) {
+            body += `\n${signature}`;
+        }
+        bodyEl.textContent = body;
+    }
+
+    // Update SMS preview
+    const smsEl = document.getElementById('preview_sms');
+    const smsCharEl = document.getElementById('sms_char_count');
+    if (smsEl) {
+        let sms = `${orgPrefix}Ministering Interview\n`;
+        sms += `${greeting}${sampleName}, schedule your interview: ${sampleLink}`;
+        if (customInstructions) {
+            sms += `\n${customInstructions}`;
+        }
+        smsEl.textContent = sms;
+
+        if (smsCharEl) {
+            smsCharEl.textContent = sms.length;
+        }
+    }
+}
+
 // Call on page load to show the correct provider settings
 document.addEventListener('DOMContentLoaded', function() {
     toggleSMSMode();
@@ -741,6 +929,9 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleSMSProvider();
     updateSchedulePreview();
     activateTabFromHash();
+    // Initialize message preview and character count
+    updateMessagePreview();
+    updateCharCount();
 });
 
 // Update schedule preview when dropdown values change

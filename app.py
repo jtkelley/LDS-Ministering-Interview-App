@@ -33,7 +33,7 @@ load_dotenv()
 
 # Import config, models, utils, services, shared
 from config import config as app_config
-from models import db, User, UserInvitation, SystemConfig, IncomingSMS, District, Companionship, Member, InterviewSlot, Booking, NotificationLog
+from models import db, User, UserInvitation, SystemConfig, IncomingSMS, District, Companionship, Member, InterviewSlot, Booking, NotificationLog, MessageTemplates
 from utils import EncryptionHelper, admin_required, group_results_by_district
 import services
 from shared import mail, progress_store, progress_lock
@@ -103,6 +103,8 @@ app.register_blueprint(api_bp)
 # Initialize database and load config
 with app.app_context():
     db.create_all()
+    # Initialize message templates with defaults if not present
+    MessageTemplates.get_or_create()
     services.apply_email_config()
     services.apply_sms_config()
     config_obj = SystemConfig.query.first()

@@ -31,8 +31,11 @@
         .full-badge { background: #f44336; color: white; padding: 5px 10px; border-radius: 4px; font-size: 12px; }
         .alert { border-radius: 8px; }
         form { margin: 0; }
-        .interview-type-select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; background: white; cursor: pointer; }
-        .interview-type-select:disabled { background: #f5f5f5; cursor: not-allowed; }
+        .interview-type-radios { display: flex; gap: 15px; align-items: center; margin-right: 20px; }
+        .interview-type-radios label { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+        .interview-type-radios input[type="radio"] { width: 18px; height: 18px; cursor: pointer; accent-color: #2196f3; }
+        .interview-type-radios.disabled label { cursor: not-allowed; color: #999; }
+        .interview-type-radios.disabled input[type="radio"] { cursor: not-allowed; }
 
         /* Mobile-specific sizing for readability */
         @media (max-width: 768px) {
@@ -79,11 +82,17 @@
                 padding: 12px 20px;
                 width: 100%;
             }
-            .interview-type-select {
-                font-size: 1rem;
-                padding: 12px 15px;
-                width: 100%;
+            .interview-type-radios {
+                margin-right: 0;
                 margin-bottom: 10px;
+                justify-content: center;
+            }
+            .interview-type-radios label {
+                font-size: 1rem;
+            }
+            .interview-type-radios input[type="radio"] {
+                width: 22px;
+                height: 22px;
             }
             .slot-item form {
                 flex-direction: column;
@@ -108,9 +117,16 @@
 <body>
     <div class="content">
         <div class="header">
-            <h1>Schedule Interview for {{ member.name }}</h1>
-            <p style="color: #666;">District: {{ member.companionship.district.name }}</p>
+            <h1>Schedule Interview for {{ member.name.split(', ')|reverse|join(' ') }}</h1>
+            <p style="color: #666;">District: {{ member.companionship.district.name }} ({{ member.companionship.district.interviewer_name.split(', ')|reverse|join(' ') }})</p>
         </div>
+
+        {% if custom_instructions %}
+        <div class="alert alert-info" style="background: #e7f3ff; border-left: 4px solid #2196f3; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+            <span style="margin-right: 8px;">&#x2139;&#xfe0f;</span>
+            {{ custom_instructions }}
+        </div>
+        {% endif %}
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -180,10 +196,16 @@
                 </div>
                 {% if slot.bookings|length < slot.max_slots %}
                     <form method="POST" action="{{ url_for('public.book_slot', slot_id=slot.id, token=member.token) }}" style="display: flex; gap: 10px; align-items: center;">
-                        <select name="interview_type" class="interview-type-select" {% if my_booking %}disabled{% endif %}>
-                            <option value="in-person">In-Person</option>
-                            <option value="phone">Phone</option>
-                        </select>
+                        <div class="interview-type-radios {% if my_booking %}disabled{% endif %}">
+                            <label>
+                                <input type="radio" name="interview_type" value="in-person" checked {% if my_booking %}disabled{% endif %}>
+                                In-Person
+                            </label>
+                            <label>
+                                <input type="radio" name="interview_type" value="phone" {% if my_booking %}disabled{% endif %}>
+                                Phone
+                            </label>
+                        </div>
                         <button type="submit" {% if my_booking %}disabled{% endif %}>Book This Slot</button>
                     </form>
                 {% else %}

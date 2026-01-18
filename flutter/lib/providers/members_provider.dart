@@ -1,0 +1,175 @@
+import 'package:flutter/foundation.dart';
+import '../models/member.dart';
+import '../models/district.dart';
+import '../services/api_service.dart';
+import '../services/invite_service.dart';
+
+/// Provider for member list and selection state
+class MembersProvider with ChangeNotifier {
+  final ApiService _apiService;
+  late final InviteService _inviteService;
+
+  List<Member> _members = [];
+  List<District> _districts = [];
+  Set<int> _selectedMemberIds = {};
+  int? _filterDistrictId;
+  bool _filterNeedsInviteOnly = true;
+  int _currentQuarter = 1;
+  int _currentYear = 2024;
+  bool _isLoading = false;
+  String? _error;
+
+  MembersProvider(this._apiService) {
+    _inviteService = InviteService(_apiService);
+  }
+
+  // Getters
+  List<Member> get members => _members;
+  List<District> get districts => _districts;
+  Set<int> get selectedMemberIds => _selectedMemberIds;
+  int? get filterDistrictId => _filterDistrictId;
+  bool get filterNeedsInviteOnly => _filterNeedsInviteOnly;
+  int get currentQuarter => _currentQuarter;
+  int get currentYear => _currentYear;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+  InviteService get inviteService => _inviteService;
+
+  /// Get selected members
+  List<Member> get selectedMembers =>
+      _members.where((m) => _selectedMemberIds.contains(m.id)).toList();
+
+  /// Check if all members are selected
+  bool get allSelected =>
+      _members.isNotEmpty && _selectedMemberIds.length == _members.length;
+
+  /// Load districts
+  Future<void> loadDistricts() async {
+    try {
+      _districts = await _apiService.getDistricts();
+      notifyListeners();
+    } catch (e) {
+      _error = 'Failed to load districts: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Load members with current filters
+  Future<void> loadMembers() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final result = await _apiService.getMembers(
+        districtId: _filterDistrictId,
+        needsInviteOnly: _filterNeedsInviteOnly,
+      );
+
+      _members = result['members'] as List<Member>;
+      _currentQuarter = result['quarter'] as int;
+      _currentYear = result['year'] as int;
+
+      // Clear selections for members no longer in list
+      _selectedMemberIds.removeWhere(
+        (id) => !_members.any((m) => m.id == id),
+      );
+    } catch (e) {
+      _error = 'Failed to load members: $e';
+      _members = [];
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Set district filter
+  void setDistrictFilter(int? districtId) {
+    _filterDistrictId = districtId;
+    loadMembers();
+  }
+
+  /// Toggle needs invite filter
+  void setNeedsInviteFilter(bool value) {
+    _filterNeedsInviteOnly = value;
+    loadMembers();
+  }
+
+  /// Toggle member selection
+  void toggleMemberSelection(int memberId) {
+    if (_selectedMemberIds.contains(memberId)) {
+      _selectedMemberIds.remove(memberId);
+    } else {
+      _selectedMemberIds.add(memberId);
+    }
+    notifyListeners();
+  }
+
+  /// Select all members
+  void selectAll() {
+    _selectedMemberIds = _members.map((m) => m.id).toSet();
+    notifyListeners();
+  }
+
+  /// Deselect all members
+  void deselectAll() {
+    _selectedMemberIds.clear();
+    notifyListeners();
+  }
+
+  /// Toggle select all
+  void toggleSelectAll() {
+    if (allSelected) {
+      deselectAll();
+    } else {
+      selectAll();
+    }
+  }
+
+  /// Send bulk SMS to selected members
+  /// Returns result map with 'sent' and 'failed' counts
+  Future<Map<String, dynamic>> sendBulkSms() async {
+    final members = selectedMembers.where((m) => m.canReceiveSms).toList();
+
+    if (members.isEmpty) {
+      return {'sent': 0, 'failed': 0, 'message': 'No members with valid phone numbers'};
+    }
+
+    final result = await _inviteService.sendBulkSmsAndroid(members);
+
+    // Reload to update notification status
+    await loadMembers();
+
+    return {
+      ...result,
+      'message': 'Sent ${result['sent']} SMS, ${result['failed']} failed',
+    };
+  }
+
+  /// Send bulk email to selected members via server
+  Future<Map<String, dynamic>> sendBulkEmail() async {
+    final members = selectedMembers.where((m) => m.canReceiveEmail).toList();
+
+    if (members.isEmpty) {
+      return {'sent': 0, 'failed': 0, 'message': 'No members with valid email addresses'};
+    }
+
+    final result = await _inviteService.sendBulkEmailViaServer(members);
+
+    // Reload to update notification status
+    await loadMembers();
+
+    return result;
+  }
+
+  /// Get member details
+  Future<Member?> getMemberDetail(int memberId) async {
+    return await _apiService.getMemberDetail(memberId);
+  }
+
+  /// Clear error
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+}

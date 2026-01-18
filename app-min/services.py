@@ -1,6 +1,7 @@
 """
 Service functions for email and notifications (minimal - no SMS).
 """
+import re
 from flask import url_for, current_app
 from flask_mail import Message
 from datetime import datetime
@@ -72,6 +73,24 @@ def reschedule_reminder_job(config, scheduler=None):
         print(f"Error rescheduling reminder job: {e}")
 
 
+def format_email_notification(member, link, quarter, year):
+    """
+    Format email notification using message templates
+    Returns (subject, body) tuple
+    """
+    from models import MessageTemplates
+
+    msg_templates = MessageTemplates.get_or_create()
+
+    # Get member name for greeting
+    display_name = ' '.join(member.name.split(', ')[::-1]) if ', ' in member.name else member.name
+
+    subject = msg_templates.render_email_subject(quarter, year)
+    body = msg_templates.render_email_body(display_name, link, quarter, year)
+
+    return subject, body
+
+
 def send_booking_reminders():
     """
     Scheduled job: Send reminders to members who haven't booked for current quarter.
@@ -118,28 +137,15 @@ def send_booking_reminders():
                 # Send email
                 if member.email:
                     try:
+                        # Use message templates for formatting
+                        subject, body = format_email_notification(member, link, current_quarter, current_year)
                         msg = Message(
-                            f'Reminder: Schedule Your Interview for Q{current_quarter}',
+                            subject,
                             sender=sender_email,
                             recipients=[member.email]
                         )
-                        msg.body = f'''Hello {member.name},
-
-This is a reminder to schedule your ministering interview for Quarter {current_quarter} of {current_year}.
-
-Click the link below to view available times and book your interview:
-{link}
-
-If your companion has already booked, you'll see their appointment highlighted so you can join them.
-
-Thank you!
-'''
-                        msg.html = f'''<p>Hello {member.name},</p>
-<p>This is a reminder to schedule your ministering interview for <strong>Quarter {current_quarter} of {current_year}</strong>.</p>
-<p><a href="{link}">Click here to view available times and book your interview</a></p>
-<p>If your companion has already booked, you'll see their appointment highlighted so you can join them.</p>
-<p>Thank you!</p>
-'''
+                        msg.html = body
+                        msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
                         mail.send(msg)
                         email_sent += 1
                     except Exception as e:

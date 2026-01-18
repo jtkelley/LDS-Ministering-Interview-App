@@ -7,7 +7,7 @@ from flask_user import current_user
 from datetime import datetime
 from sqlalchemy import func
 
-from models import db, User, UserInvitation, District, Member, InterviewSlot, Booking, Companionship
+from models import db, User, UserInvitation, District, Member, InterviewSlot, Booking, Companionship, MessageTemplates
 from shared import mail
 
 # Create blueprint (no URL prefix - these are root-level routes)
@@ -257,7 +257,11 @@ def schedule(token):
         if is_available or is_my_slot or is_companion_slot:
             available_slots.append(slot)
 
-    return render_template('schedule.html', member=member, slots=available_slots, companion_booking=companion_booking, my_booking=my_booking)
+    # Get custom instructions from message templates
+    msg_config = MessageTemplates.get_or_create()
+    custom_instructions = msg_config.custom_instructions if msg_config else None
+
+    return render_template('schedule.html', member=member, slots=available_slots, companion_booking=companion_booking, my_booking=my_booking, custom_instructions=custom_instructions)
 
 
 @public_bp.route('/book/<int:slot_id>/<token>', methods=['POST'])

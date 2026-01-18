@@ -267,3 +267,144 @@ class NotificationLog(db.Model):
 
     def __repr__(self):
         return f'<NotificationLog {self.member.name if self.member else "Unknown"} - {self.method} - Q{self.quarter} {self.year}>'
+
+
+# Default message templates
+DEFAULT_EMAIL_SUBJECT = "{org_name}Ministering Interview - Q{quarter} {year}"
+DEFAULT_EMAIL_BODY = """<p>{greeting}{name},</p>
+<p>Interview slots are now available for the current quarter (Q{quarter} {year}).</p>
+<p><a href="{link}">Click here to schedule your interview</a></p>
+{instructions}
+<p>Thank you,<br>{signature}</p>"""
+
+DEFAULT_SMS = """{org_name}Ministering Interview
+{greeting}{name}, schedule your interview:
+
+{link}
+
+{instructions}"""
+
+
+class MessageTemplates(db.Model):
+    """Message customization settings - single row table"""
+    __tablename__ = 'message_templates'
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Simple settings (exposed in UI)
+    organization_name = db.Column(db.String(100))
+    greeting_style = db.Column(db.String(20), default='Dear')
+    custom_instructions = db.Column(db.String(500))
+    signature_name = db.Column(db.String(100))
+    signature_title = db.Column(db.String(100))
+
+    # Full templates (edit via SQL if needed)
+    email_subject_template = db.Column(db.Text)
+    email_body_template = db.Column(db.Text)
+    sms_template = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+    @staticmethod
+    def get_or_create():
+        """Get existing settings or create with defaults. Also backfills missing templates."""
+        settings = MessageTemplates.query.first()
+        if not settings:
+            settings = MessageTemplates(
+                greeting_style='Dear',
+                email_subject_template=DEFAULT_EMAIL_SUBJECT,
+                email_body_template=DEFAULT_EMAIL_BODY,
+                sms_template=DEFAULT_SMS
+            )
+            db.session.add(settings)
+            db.session.commit()
+        else:
+            # Backfill any missing templates
+            updated = False
+            if not settings.email_subject_template:
+                settings.email_subject_template = DEFAULT_EMAIL_SUBJECT
+                updated = True
+            if not settings.email_body_template:
+                settings.email_body_template = DEFAULT_EMAIL_BODY
+                updated = True
+            if not settings.sms_template:
+                settings.sms_template = DEFAULT_SMS
+                updated = True
+            if updated:
+                db.session.commit()
+        return settings
+
+    def format_org_name(self):
+        """Format organization name with separator if set"""
+        if self.organization_name:
+            return f"{self.organization_name} - "
+        return ""
+
+    def format_greeting(self, name=None):
+        """Format greeting based on style"""
+        if not self.greeting_style or self.greeting_style == 'None':
+            return ""
+        return f"{self.greeting_style} "
+
+    def format_signature(self):
+        """Format signature from name and title"""
+        parts = []
+        if self.signature_name:
+            parts.append(self.signature_name)
+        if self.signature_title:
+            parts.append(self.signature_title)
+        return "\n".join(parts)
+
+    def format_instructions(self, for_sms=False):
+        """Format custom instructions - HTML wrapped for email, plain for SMS"""
+        if not self.custom_instructions:
+            return ""
+        if for_sms:
+            return self.custom_instructions
+        return f"<p>{self.custom_instructions}</p>"
+
+    def render_email_subject(self, quarter, year):
+        """Render email subject with placeholders filled"""
+        template = self.email_subject_template or DEFAULT_EMAIL_SUBJECT
+        return template.format(
+            org_name=self.format_org_name(),
+            quarter=quarter,
+            year=year
+        )
+
+    def render_email_body(self, name, link, quarter, year):
+        """Render email body with placeholders filled"""
+        template = self.email_body_template or DEFAULT_EMAIL_BODY
+
+        # Build the body with proper formatting
+        body = template.format(
+            greeting=self.format_greeting(),
+            name=name,
+            quarter=quarter,
+            year=year,
+            link=link,
+            instructions=self.format_instructions(),
+            signature=self.format_signature()
+        )
+
+        # Clean up extra blank lines
+        import re
+        body = re.sub(r'\n{3,}', '\n\n', body)
+        return body.strip()
+
+    def render_sms(self, name, link):
+        """Render SMS message with placeholders filled"""
+        template = self.sms_template or DEFAULT_SMS
+
+        msg = template.format(
+            org_name=self.format_org_name(),
+            greeting=self.format_greeting(),
+            name=name,
+            link=link,
+            instructions=self.format_instructions(for_sms=True)
+        )
+
+        # Clean up extra whitespace for SMS (allow one blank line, collapse multiple)
+        import re
+        msg = re.sub(r'\n{3,}', '\n\n', msg)
+        return msg.strip()
