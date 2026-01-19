@@ -7,16 +7,18 @@
 
         <ul class="nav nav-tabs mb-4" role="tablist">
             <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="email-tab" data-bs-toggle="tab" data-bs-target="#email" type="button" role="tab">📧 Email Settings</button>
+                <button class="nav-link active" id="email-tab" data-bs-toggle="tab" data-bs-target="#email" type="button" role="tab">Email Settings</button>
+            </li>
+            {% if features.sms %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="sms-tab" data-bs-toggle="tab" data-bs-target="#sms" type="button" role="tab">SMS Settings</button>
+            </li>
+            {% endif %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="scheduler-tab" data-bs-toggle="tab" data-bs-target="#scheduler" type="button" role="tab">Scheduler Settings</button>
             </li>
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="sms-tab" data-bs-toggle="tab" data-bs-target="#sms" type="button" role="tab">📱 SMS Settings</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="scheduler-tab" data-bs-toggle="tab" data-bs-target="#scheduler" type="button" role="tab">⏰ Scheduler Settings</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab">✉️ Messages</button>
+                <button class="nav-link" id="messages-tab" data-bs-toggle="tab" data-bs-target="#messages" type="button" role="tab">Messages</button>
             </li>
         </ul>
         
@@ -85,14 +87,15 @@
                             </div>
                             
                             <div class="mb-3">
-                                <button type="submit" class="btn btn-primary">💾 Save Email Settings</button>
-                                <a href="{{ url_for('admin.send_test_email') }}" class="btn btn-secondary">✉️ Send Test Email</a>
+                                <button type="submit" class="btn btn-primary">Save Email Settings</button>
+                                <a href="{{ url_for('admin.send_test_email') }}" class="btn btn-secondary">Send Test Email</a>
                             </div>
                         </form>
                     </div>
                 </div>
             </div>
             
+            {% if features.sms %}
             <!-- SMS Settings Tab -->
             <div class="tab-pane fade" id="sms" role="tabpanel">
                 <div class="card">
@@ -103,7 +106,7 @@
 
                             <!-- SMS Mode Selection -->
                             <div class="mb-4 p-3 bg-light rounded">
-                                <h6 class="mb-3">📱 SMS Mode</h6>
+                                <h6 class="mb-3">SMS Mode</h6>
 
                                 <div class="form-check mb-3">
                                     <input type="radio" class="form-check-input" id="sms_mode_one_way" name="sms_mode" value="one_way"
@@ -141,13 +144,13 @@
                                         <h2 class="accordion-header" id="headingGuide">
                                             <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
                                                     data-bs-target="#collapseGuide" aria-expanded="false" aria-controls="collapseGuide">
-                                                <strong>📖 SMS Provider Setup Guide & Cost Comparison</strong>
+                                                <strong>SMS Provider Setup Guide & Cost Comparison</strong>
                                             </button>
                                         </h2>
                                         <div id="collapseGuide" class="accordion-collapse collapse" aria-labelledby="headingGuide">
                                             <div class="accordion-body">
                                                 <!-- Provider Comparison Table -->
-                                                <h6 class="mb-3">💰 Cost Comparison (for ~400 messages/month)</h6>
+                                                <h6 class="mb-3">Cost Comparison (for ~400 messages/month)</h6>
                                                 <div class="table-responsive mb-4">
                                                     <table class="table table-sm table-bordered">
                                                         <thead class="table-light">
@@ -195,7 +198,7 @@
 
                                                 <!-- Recommendation Box -->
                                                 <div class="alert alert-success mb-4">
-                                                    <h6 class="alert-heading">✅ Our Recommendation</h6>
+                                                    <h6 class="alert-heading">Our Recommendation</h6>
                                                     <p class="mb-2">
                                                         For church apps with low volume (~400 msgs/month) and volunteer management:
                                                     </p>
@@ -210,7 +213,7 @@
                                                 </div>
 
                                                 <!-- Setup Instructions Accordion -->
-                                                <h6 class="mb-3">🔧 Provider Setup Instructions</h6>
+                                                <h6 class="mb-3">Provider Setup Instructions</h6>
                                                 <div class="accordion" id="providerSetupAccordion">
 
                                                     <!-- AWS SNS Setup -->
@@ -256,7 +259,7 @@
                                                                     </li>
                                                                 </ol>
                                                                 <div class="alert alert-info mt-3 mb-0">
-                                                                    <strong>💡 Tip:</strong> AWS free tier includes 100 SMS messages per month for the first 12 months,
+                                                                    <strong>Tip:</strong> AWS free tier includes 100 SMS messages per month for the first 12 months,
                                                                     reducing your costs further during the first year.
                                                                 </div>
                                                             </div>
@@ -308,7 +311,7 @@
                                                                     </li>
                                                                 </ol>
                                                                 <div class="alert alert-info mt-3 mb-0">
-                                                                    <strong>💡 Tip:</strong> Twilio offers the most extensive documentation and support resources,
+                                                                    <strong>Tip:</strong> Twilio offers the most extensive documentation and support resources,
                                                                     making it great if you need extra help during setup.
                                                                 </div>
                                                             </div>
@@ -361,7 +364,7 @@
                                                                     </li>
                                                                 </ol>
                                                                 <div class="alert alert-info mt-3 mb-0">
-                                                                    <strong>💡 Tip:</strong> SignalWire offers the best cost-per-message rates for 2-way messaging
+                                                                    <strong>Tip:</strong> SignalWire offers the best cost-per-message rates for 2-way messaging
                                                                     and advanced features if you plan to scale up later.
                                                                 </div>
                                                             </div>
@@ -371,7 +374,7 @@
 
                                                 <!-- Important Notes -->
                                                 <div class="alert alert-warning mt-4 mb-0">
-                                                    <h6 class="alert-heading">⚠️ Important: A2P 10DLC Registration</h6>
+                                                    <h6 class="alert-heading">Important: A2P 10DLC Registration</h6>
                                                     <p class="mb-2">
                                                         All SMS providers require A2P (Application-to-Person) 10DLC registration for US phone numbers.
                                                         This is a US carrier requirement, not a provider choice.
@@ -392,7 +395,7 @@
 
                             <!-- Personal Contact Information (1-Way Mode) -->
                             <div id="one_way_settings" class="mb-4 p-3 bg-light rounded" style="display: block;">
-                                <h6 class="mb-3">📞 Reply Contact Information</h6>
+                                <h6 class="mb-3">Reply Contact Information</h6>
                                 <p class="text-muted small">
                                     When using 1-way messaging, include your contact information for members to reach you directly.
                                 </p>
@@ -425,7 +428,7 @@
                                     <!-- Live Preview -->
                                     <div class="card bg-white">
                                         <div class="card-header bg-primary text-white">
-                                            <strong>📱 Message Preview</strong>
+                                            <strong>Message Preview</strong>
                                         </div>
                                         <div class="card-body">
                                             <pre id="message_preview" style="white-space: pre-wrap; font-family: system-ui; margin: 0;">Loading preview...</pre>
@@ -440,7 +443,7 @@
                             <!-- 2-Way Settings (Hidden in Phase 1) -->
                             <div id="two_way_settings" class="mb-4 p-3 bg-light rounded" style="display: none;">
                                 <div class="alert alert-info mb-0">
-                                    <strong>🚧 2-Way Messaging Setup</strong>
+                                    <strong>2-Way Messaging Setup</strong>
                                     <p class="mb-2">
                                         This feature is coming soon and will include:
                                     </p>
@@ -557,18 +560,18 @@
                             </div>
 
                             <div class="mb-3 mt-4">
-                                <button type="submit" class="btn btn-primary">💾 Save SMS Settings</button>
+                                <button type="submit" class="btn btn-primary">Save SMS Settings</button>
                             </div>
                         </form>
 
                         <!-- Test SMS Form (separate from save form) -->
                         <div class="card mt-3">
                             <div class="card-body bg-light">
-                                <h6 class="card-title">📱 Send Test SMS</h6>
+                                <h6 class="card-title">Send Test SMS</h6>
                                 <p class="text-muted small mb-3">
                                     Send a test message to verify your SMS configuration and see how the formatted message will appear.
                                 </p>
-                                <form method="POST" action="{{ url_for('admin.send_test_sms') }}" class="row g-3">
+                                <form method="POST" action="{{ url_for('sms.send_test_sms') }}" class="row g-3">
                                     <div class="col-md-8">
                                         <label for="test_phone_number" class="form-label">Phone Number</label>
                                         <input type="tel" class="form-control" id="test_phone_number" name="test_phone_number"
@@ -576,7 +579,7 @@
                                         <small class="form-text text-muted">Enter your phone number to receive the test SMS</small>
                                     </div>
                                     <div class="col-md-4 d-flex align-items-end">
-                                        <button type="submit" class="btn btn-secondary w-100">📱 Send Test SMS</button>
+                                        <button type="submit" class="btn btn-secondary w-100">Send Test SMS</button>
                                     </div>
                                 </form>
                             </div>
@@ -584,6 +587,7 @@
                     </div>
                 </div>
             </div>
+            {% endif %}
 
             <!-- Scheduler Settings Tab -->
             <div class="tab-pane fade" id="scheduler" role="tabpanel">
@@ -638,11 +642,11 @@
                     </div>
 
                     <div class="alert alert-info" id="schedule-preview">
-                        <strong>📅 Schedule Preview:</strong>
+                        <strong>Schedule Preview:</strong>
                         <span id="preview-text"></span>
                     </div>
 
-                    <button type="submit" class="btn btn-primary">💾 Save Scheduler Settings</button>
+                    <button type="submit" class="btn btn-primary">Save Scheduler Settings</button>
                 </form>
             </div>
 
@@ -713,14 +717,14 @@
                                                onkeyup="updateMessagePreview()">
                                     </div>
 
-                                    <button type="submit" class="btn btn-primary">💾 Save Message Settings</button>
+                                    <button type="submit" class="btn btn-primary">Save Message Settings</button>
                                 </div>
 
                                 <!-- Live Preview -->
                                 <div class="col-lg-6">
                                     <div class="card bg-light">
                                         <div class="card-header">
-                                            <strong>📧 Email Preview</strong>
+                                            <strong>Email Preview</strong>
                                         </div>
                                         <div class="card-body" style="font-family: monospace; font-size: 13px;">
                                             <div class="mb-2">
@@ -741,7 +745,7 @@ Thank you,</pre>
 
                                     <div class="card bg-light mt-3">
                                         <div class="card-header">
-                                            <strong>📱 SMS Preview</strong>
+                                            <strong>SMS Preview</strong>
                                         </div>
                                         <div class="card-body" style="font-family: monospace; font-size: 13px;">
                                             <pre id="preview_sms" style="white-space: pre-wrap; margin: 0; font-family: inherit;">Ministering Interview
@@ -761,7 +765,7 @@ Dear John Smith, schedule your interview: https://example.com/schedule/abc123</p
 
         <!-- Security Notice -->
         <div class="alert alert-warning mt-4">
-            <strong>🔒 Security Note:</strong>
+            <strong>Security Note:</strong>
             <p class="mb-0">
                 All sensitive credentials (passwords, tokens, API keys) are encrypted before being stored in the database.
                 Password fields show as blanks for security - they only need to be filled when changing them.

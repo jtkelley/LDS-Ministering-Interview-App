@@ -74,7 +74,7 @@
                 <div class="d-flex justify-content-between align-items-center companionship-header">
                     <strong>Companionship {{ companionship.id }}</strong>
                     <div>
-                        <a href="{{ url_for('admin.add_member', companionship_id=companionship.id) }}" class="btn btn-sm btn-outline-primary">Add Member</a>
+                        <a href="{{ url_for('admin.add_member_to_companionship', companionship_id=companionship.id) }}" class="btn btn-sm btn-outline-primary">Add Member</a>
                         <form method="POST" action="{{ url_for('admin.remove_companionship', companionship_id=companionship.id) }}" style="display:inline;">
                             <button type="submit" class="btn btn-sm btn-outline-danger" data-confirm-message="Remove this companionship and all its members?" data-confirm-variant="danger">Remove Companionship</button>
                         </form>

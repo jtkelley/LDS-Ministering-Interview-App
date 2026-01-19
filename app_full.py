@@ -1,7 +1,6 @@
 """
-Minimal Flask Application Entry Point
-Core features only - no scraping (Selenium) or SMS (Twilio/AWS/SignalWire)
-Suitable for deployment on resource-constrained environments like Oracle Cloud free tier.
+Full Flask Application Entry Point
+Includes all features: scraping (Selenium) and SMS (Twilio/AWS/SignalWire)
 """
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, session
@@ -18,9 +17,12 @@ load_dotenv()
 
 # Import from core
 from core.config import config as app_config
-from core.models import db, User, UserInvitation, SystemConfig, District, Companionship, Member, InterviewSlot, Booking, NotificationLog, MessageTemplates
+from core.models import db, User, UserInvitation, SystemConfig, IncomingSMS, District, Companionship, Member, InterviewSlot, Booking, NotificationLog, MessageTemplates
 from core.shared import mail, progress_store, progress_lock
 from core import services
+
+# Import SMS services for full app
+from features.sms import services as sms_services
 
 # Create Flask app
 app = Flask(__name__)
@@ -48,8 +50,8 @@ def inject_globals():
     return {
         'now': datetime.now(),
         'features': {
-            'scraping': False,
-            'sms': False
+            'scraping': True,
+            'sms': True
         }
     }
 
@@ -78,7 +80,7 @@ def check_user_validity():
             return redirect(url_for('user.login'))
 
 
-# Register Core Blueprints only (no scraping, no SMS)
+# Register Core Blueprints
 from core.routes.public import public_bp
 from core.routes.admin import admin_bp
 from core.routes.api import api_bp
@@ -86,7 +88,11 @@ app.register_blueprint(public_bp)
 app.register_blueprint(admin_bp)
 app.register_blueprint(api_bp)
 
-# Note: No scraping_bp registered - scraping not available in minimal version
+# Register Feature Blueprints (scraping and sms)
+from features.scraping.routes import scraping_bp
+from features.sms.routes import sms_bp
+app.register_blueprint(scraping_bp)
+app.register_blueprint(sms_bp)
 
 
 # Initialize database and load config
@@ -95,9 +101,10 @@ with app.app_context():
     # Initialize message templates with defaults if not present
     MessageTemplates.get_or_create()
     services.apply_email_config()
-    # Note: No SMS config in minimal version
+    sms_services.apply_sms_config()  # Full app has SMS
     config_obj = SystemConfig.query.first()
     if config_obj and config_obj.reminder_enabled:
+        # Use SMS-enabled reminder function in full app
         services.reschedule_reminder_job(config_obj, scheduler)
     else:
         print("Reminders are disabled by default. Scheduler not started.")
@@ -108,7 +115,7 @@ if __name__ == '__main__':
         db.create_all()
         MessageTemplates.get_or_create()
         services.apply_email_config()
-        # Note: No SMS config in minimal version
+        sms_services.apply_sms_config()  # Full app has SMS
 
         # Schedule automated reminder job
         config = SystemConfig.query.first()

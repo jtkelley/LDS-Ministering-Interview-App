@@ -1,88 +1,27 @@
-# Use Python 3.11 slim image as base (match your development environment)
+# Minimal version - no Chrome/Selenium, smaller image
+# Use this if you don't need LCR scraping (CSV import only)
 FROM python:3.11-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install system dependencies for Chrome and Selenium
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    gpg \
-    curl \
-    unzip \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libx11-xcb1 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    xdg-utils \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Google Chrome (modern approach)
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
-
-# Verify Chrome installation and get version
-RUN google-chrome --version
-
-# Install ChromeDriver matching Chrome version
-# Chrome 142 requires ChromeDriver 142
-RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+\.\d+' | cut -d'.' -f1) && \
-    echo "Chrome major version: $CHROME_VERSION" && \
-    wget -q "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json" -O /tmp/versions.json && \
-    CHROMEDRIVER_URL=$(python3 -c "import json; data=json.load(open('/tmp/versions.json')); print(data['channels']['Stable']['downloads']['chromedriver'][0]['url'])") && \
-    echo "Downloading ChromeDriver from: $CHROMEDRIVER_URL" && \
-    wget -q "$CHROMEDRIVER_URL" -O /tmp/chromedriver-linux64.zip && \
-    unzip -q /tmp/chromedriver-linux64.zip -d /tmp/ && \
-    mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/chromedriver && \
-    chmod +x /usr/local/bin/chromedriver && \
-    rm -rf /tmp/chromedriver-linux64.zip /tmp/chromedriver-linux64 /tmp/versions.json && \
-    chromedriver --version
 
 # Set working directory
 WORKDIR /app
 
-
-# Copy only the necessary files and folders
+# Copy application files
 COPY requirements.txt ./
 COPY app.py ./
-COPY config.py ./
-COPY models.py ./
-COPY shared.py ./
-COPY services.py ./
-COPY routes_admin.py ./
-COPY routes_public.py ./
-COPY app_scraper.py ./
-COPY utils/ ./utils/
+COPY core/ ./core/
 COPY templates/ ./templates/
-
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create instance directory for SQLite database with proper permissions
-RUN mkdir -p /app/instance \
-    && chmod 777 /app/instance
+# Create instance directory for SQLite database
+RUN mkdir -p /app/instance && chmod 777 /app/instance
 
-# Expose port (Render will set $PORT)
+# Expose port
 EXPOSE 8181
 
-# Run the application with gunicorn for production
-# Render provides $PORT environment variable, default to 8181 for local testing
-# Using shell form to support ${PORT:-8181} variable substitution
+# Run with gunicorn
 CMD gunicorn --bind 0.0.0.0:${PORT:-8181} --workers 1 --timeout 120 app:app

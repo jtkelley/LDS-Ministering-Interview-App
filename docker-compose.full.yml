@@ -1,8 +1,11 @@
 version: '3.8'
 
+# Full version with Chrome/Selenium for LCR scraping
 services:
   ministering-app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.full
     ports:
       - "80:8181"
     volumes:
@@ -10,7 +13,6 @@ services:
       - ./instance:/app/instance
     environment:
       # Flask secret key for sessions and database encryption
-      # Uses .env file value or falls back to default
       - SECRET_KEY=${SECRET_KEY:-dev-local-ministering-interviews-key-not-for-production-use-12345678}
       # Port for gunicorn to bind to
       - PORT=8181

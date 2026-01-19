@@ -1,0 +1,438 @@
+{% extends "base.html" %}
+
+{% block title %}Import Preview{% endblock %}
+
+{% block extra_css %}
+<style>
+    .nav-tabs .nav-link {
+        color: #495057;
+    }
+    .nav-tabs .nav-link.active {
+        font-weight: bold;
+    }
+    .badge-count {
+        font-size: 0.85em;
+        margin-left: 5px;
+    }
+    .match-card {
+        border-left: 4px solid;
+        margin-bottom: 10px;
+    }
+    .match-card.exact { border-left-color: #198754; }
+    .match-card.new { border-left-color: #0d6efd; }
+    .match-card.ambiguous { border-left-color: #ffc107; }
+    .match-card.inactive { border-left-color: #6c757d; }
+    .match-card.delete { border-left-color: #dc3545; }
+    .score-badge {
+        font-size: 0.75em;
+        padding: 2px 6px;
+        border-radius: 3px;
+    }
+    .score-high { background-color: #198754; color: white; }
+    .score-medium { background-color: #ffc107; color: black; }
+    .score-low { background-color: #dc3545; color: white; }
+    .change-list {
+        font-size: 0.9em;
+        color: #6c757d;
+        margin: 0;
+        padding-left: 20px;
+    }
+    .potential-match {
+        padding: 8px;
+        margin: 5px 0;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+    }
+    .summary-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .stat-item {
+        padding: 10px 15px;
+        border-radius: 5px;
+        min-width: 120px;
+        text-align: center;
+    }
+    .stat-item.exact { background-color: #d1e7dd; }
+    .stat-item.new { background-color: #cfe2ff; }
+    .stat-item.ambiguous { background-color: #fff3cd; }
+    .stat-item.inactive { background-color: #e9ecef; }
+    .stat-item.delete { background-color: #f8d7da; }
+    .stat-number {
+        font-size: 1.5em;
+        font-weight: bold;
+    }
+    .stat-label {
+        font-size: 0.85em;
+        color: #6c757d;
+    }
+    .search-section {
+        background: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="mb-4">Import Preview</h1>
+
+<!-- Summary Stats -->
+<div class="summary-stats">
+    <div class="stat-item exact">
+        <div class="stat-number">{{ preview.stats.exact_matches }}</div>
+        <div class="stat-label">Exact Matches</div>
+    </div>
+    <div class="stat-item new">
+        <div class="stat-number">{{ preview.stats.new }}</div>
+        <div class="stat-label">New Members</div>
+    </div>
+    <div class="stat-item ambiguous">
+        <div class="stat-number">{{ preview.stats.ambiguous }}</div>
+        <div class="stat-label">Ambiguous</div>
+    </div>
+    <div class="stat-item inactive">
+        <div class="stat-number">{{ preview.stats.to_deactivate }}</div>
+        <div class="stat-label">To Deactivate</div>
+    </div>
+    <div class="stat-item delete">
+        <div class="stat-number">{{ preview.stats.to_delete }}</div>
+        <div class="stat-label">To Delete</div>
+    </div>
+</div>
+
+<!-- Search -->
+<div class="search-section">
+    <div class="row align-items-center">
+        <div class="col-md-6">
+            <input type="text" id="searchInput" class="form-control" placeholder="Search by name, email, or phone..." onkeyup="filterCards()">
+        </div>
+        <div class="col-md-6 text-muted">
+            <small>Search filters across all tabs</small>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-info">
+    <strong>Summary:</strong> {{ preview.stats.total_import }} members in import file.
+    {% if preview.stats.exact_matches > 0 %}{{ preview.stats.exact_matches }} will be matched to existing records.{% endif %}
+    {% if preview.stats.new > 0 %}{{ preview.stats.new }} new members will be created.{% endif %}
+    {% if preview.stats.ambiguous > 0 %}<span class="text-warning"><strong>{{ preview.stats.ambiguous }} require your decision below.</strong></span>{% endif %}
+</div>
+
+<form method="POST" action="{{ url_for(execute_endpoint) }}" id="importForm">
+    <input type="hidden" name="preview_id" value="{{ preview_id }}">
+
+    <!-- Clear Data Option & Action Buttons (Top) -->
+    <div class="card mb-3">
+        <div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="clear_existing_top" name="clear_existing">
+                <label class="form-check-label text-danger" for="clear_existing_top">
+                    <strong>Clear all existing data before import</strong> - Deletes all districts, companionships, members, and bookings
+                </label>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" name="confirm_import" class="btn btn-success">
+                    Confirm Import
+                </button>
+                <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" href="#exact">
+                Exact Matches <span class="badge bg-success badge-count">{{ preview.stats.exact_matches }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#new">
+                New Members <span class="badge bg-primary badge-count">{{ preview.stats.new }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if preview.stats.ambiguous > 0 %}text-warning fw-bold{% endif %}" data-bs-toggle="tab" href="#ambiguous">
+                Ambiguous <span class="badge bg-warning text-dark badge-count">{{ preview.stats.ambiguous }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#inactive">
+                To Deactivate <span class="badge bg-secondary badge-count">{{ preview.stats.to_deactivate }}</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#delete">
+                To Delete <span class="badge bg-danger badge-count">{{ preview.stats.to_delete }}</span>
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Exact Matches Tab -->
+        <div class="tab-pane fade show active" id="exact">
+            {% if preview.members_to_update %}
+                <p class="text-muted">These members will be matched to existing records and updated.</p>
+                {% for member in preview.members_to_update %}
+                <div class="card match-card exact mb-2">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>{{ member.name }}</strong>
+                                {% if member.name != member.existing_name %}
+                                    <small class="text-muted">(was: {{ member.existing_name }})</small>
+                                {% endif %}
+                                <br>
+                                <small>
+                                    {% if member.email %}{{ member.email }}{% endif %}
+                                    {% if member.phone %} | {{ member.phone }}{% endif %}
+                                </small>
+                                <br>
+                                <small class="text-muted">District: {{ member.district_name }}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="score-badge score-high">{{ member.match_score }}</span>
+                                <br>
+                                <small class="text-muted">{{ member.match_reason }}</small>
+                            </div>
+                        </div>
+                        {% if member.changes %}
+                        <ul class="change-list mt-1">
+                            {% for change in member.changes %}
+                            <li>{{ change }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No exact matches found.</p>
+            {% endif %}
+        </div>
+
+        <!-- New Members Tab -->
+        <div class="tab-pane fade" id="new">
+            {% if preview.members_to_create %}
+                <p class="text-muted">These members will be created as new records.</p>
+                {% for member in preview.members_to_create %}
+                <div class="card match-card new mb-2">
+                    <div class="card-body py-2">
+                        <strong>{{ member.name }}</strong><br>
+                        <small>
+                            {% if member.email %}{{ member.email }}{% endif %}
+                            {% if member.phone %} | {{ member.phone }}{% endif %}
+                            {% if not member.email and not member.phone %}(No contact info){% endif %}
+                        </small>
+                        <br>
+                        <small class="text-muted">District: {{ member.district_name }}</small>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No new members to create.</p>
+            {% endif %}
+        </div>
+
+        <!-- Ambiguous Tab -->
+        <div class="tab-pane fade" id="ambiguous">
+            {% if preview.ambiguous_matches %}
+                <div class="alert alert-warning">
+                    <strong>Action Required:</strong> These import rows match multiple existing members or have uncertain matches. Please choose how to handle each one.
+                </div>
+                {% for ambiguous in preview.ambiguous_matches %}
+                {% set outer_idx = loop.index0 %}
+                <div class="card match-card ambiguous mb-3">
+                    <div class="card-header bg-warning bg-opacity-25">
+                        <strong>Import: {{ ambiguous.import_data.name }}</strong>
+                        {% if ambiguous.import_data.email %}<br><small>{{ ambiguous.import_data.email }}</small>{% endif %}
+                        {% if ambiguous.import_data.phone %}<br><small>{{ ambiguous.import_data.phone }}</small>{% endif %}
+                        <br><small class="text-muted">District: {{ ambiguous.import_data.district_name }}</small>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Potential matches:</strong></p>
+                        {% for match in ambiguous.potential_matches %}
+                        <div class="potential-match">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio"
+                                       name="ambiguous_{{ outer_idx }}"
+                                       value="{{ match.member_id }}"
+                                       id="ambiguous_{{ outer_idx }}_{{ match.member_id }}"
+                                       {% if loop.first %}checked{% endif %}>
+                                <label class="form-check-label" for="ambiguous_{{ outer_idx }}_{{ match.member_id }}">
+                                    <strong>{{ match.member_name }}</strong>
+                                    {% if match.member_email %} ({{ match.member_email }}){% endif %}
+                                    {% if match.member_phone %} | {{ match.member_phone }}{% endif %}
+                                    <span class="score-badge {% if match.score >= 90 %}score-high{% elif match.score >= 50 %}score-medium{% else %}score-low{% endif %} ms-2">
+                                        Score: {{ match.score }}
+                                    </span>
+                                    <br>
+                                    <small class="text-muted">{{ match.reason }}{% if match.has_bookings %} | Has booking history{% endif %}</small>
+                                </label>
+                                <div class="form-check ms-4 mt-1">
+                                    <input class="form-check-input" type="checkbox"
+                                           name="update_contact_{{ outer_idx }}_{{ match.member_id }}"
+                                           id="update_contact_{{ outer_idx }}_{{ match.member_id }}">
+                                    <label class="form-check-label small text-info" for="update_contact_{{ outer_idx }}_{{ match.member_id }}">
+                                        Also update contact info from import
+                                        {% if ambiguous.import_data.email or ambiguous.import_data.phone %}
+                                        ({% if ambiguous.import_data.email %}{{ ambiguous.import_data.email }}{% endif %}{% if ambiguous.import_data.email and ambiguous.import_data.phone %}, {% endif %}{% if ambiguous.import_data.phone %}{{ ambiguous.import_data.phone }}{% endif %})
+                                        {% endif %}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        <div class="potential-match">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio"
+                                       name="ambiguous_{{ outer_idx }}"
+                                       value="new"
+                                       id="ambiguous_{{ outer_idx }}_new">
+                                <label class="form-check-label" for="ambiguous_{{ outer_idx }}_new">
+                                    <strong>Create as NEW member</strong>
+                                    <br>
+                                    <small class="text-muted">This person is not in the database yet</small>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No ambiguous matches. All import rows have clear matches or will be created as new.</p>
+            {% endif %}
+        </div>
+
+        <!-- To Deactivate Tab -->
+        <div class="tab-pane fade" id="inactive">
+            {% if preview.members_to_deactivate %}
+                <div class="alert alert-secondary">
+                    <strong>Note:</strong> These members are not in the import but have booking history. They will be marked as <strong>inactive</strong> and preserved (not deleted).
+                </div>
+                {% for member in preview.members_to_deactivate %}
+                <div class="card match-card inactive mb-2">
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <strong>{{ member.name }}</strong>
+                                {% if not member.is_currently_active %}<span class="badge bg-secondary ms-1">Already Inactive</span>{% endif %}
+                                <br>
+                                <small>
+                                    {% if member.email %}{{ member.email }}{% endif %}
+                                    {% if member.phone %} | {{ member.phone }}{% endif %}
+                                </small>
+                                <br>
+                                <small class="text-muted">Was in: {{ member.district_name }}</small>
+                            </div>
+                            <div class="text-end">
+                                {% if member.booking_count > 0 %}
+                                <span class="badge bg-info">{{ member.booking_count }} booking(s)</span>
+                                {% endif %}
+                                {% if member.notification_count > 0 %}
+                                <span class="badge bg-secondary">{{ member.notification_count }} notification(s)</span>
+                                {% endif %}
+                                {% if member.last_booking %}
+                                <br><small class="text-muted">Last booking: {{ member.last_booking }}</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No members to deactivate.</p>
+            {% endif %}
+        </div>
+
+        <!-- To Delete Tab -->
+        <div class="tab-pane fade" id="delete">
+            {% if preview.members_to_delete %}
+                <div class="alert alert-danger">
+                    <strong>Warning:</strong> These members are not in the import and have <strong>no booking history</strong>. They will be permanently deleted.
+                </div>
+                {% for member in preview.members_to_delete %}
+                <div class="card match-card delete mb-2">
+                    <div class="card-body py-2">
+                        <strong>{{ member.name }}</strong><br>
+                        <small>
+                            {% if member.email %}{{ member.email }}{% endif %}
+                            {% if member.phone %} | {{ member.phone }}{% endif %}
+                        </small>
+                        <br>
+                        <small class="text-muted">Was in: {{ member.district_name }}</small>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No members will be deleted.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Action Buttons (Bottom) -->
+    <div class="mt-4 d-flex gap-2">
+        <button type="submit" name="confirm_import" class="btn btn-success">
+            Confirm Import
+        </button>
+        <a href="{{ cancel_url }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Search/filter function for all cards
+    function filterCards() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toLowerCase();
+        const cards = document.querySelectorAll('.match-card');
+
+        cards.forEach(card => {
+            const text = card.textContent.toLowerCase();
+            if (!filter || text.indexOf(filter) > -1) {
+                card.style.display = '';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    }
+
+    // Auto-switch to ambiguous tab if there are any
+    {% if preview.stats.ambiguous > 0 %}
+    document.addEventListener('DOMContentLoaded', function() {
+        // Flash the ambiguous tab to draw attention
+        const ambiguousTab = document.querySelector('a[href="#ambiguous"]');
+        if (ambiguousTab) {
+            ambiguousTab.classList.add('animate__animated', 'animate__pulse');
+        }
+    });
+    {% endif %}
+
+    // Validate that all ambiguous decisions are made before submit
+    document.getElementById('importForm').addEventListener('submit', function(e) {
+        {% if preview.stats.ambiguous > 0 %}
+        const ambiguousCount = {{ preview.stats.ambiguous }};
+        for (let i = 0; i < ambiguousCount; i++) {
+            const radios = document.querySelectorAll('input[name="ambiguous_' + i + '"]');
+            const checked = Array.from(radios).some(r => r.checked);
+            if (!checked) {
+                e.preventDefault();
+                alert('Please make a decision for all ambiguous matches before importing.');
+                // Switch to ambiguous tab
+                const tab = new bootstrap.Tab(document.querySelector('a[href="#ambiguous"]'));
+                tab.show();
+                return false;
+            }
+        }
+        {% endif %}
+        return true;
+    });
+</script>
+{% endblock %}

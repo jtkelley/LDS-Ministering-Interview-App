@@ -12,10 +12,10 @@ import sys
 import csv
 import getpass
 
-# Add parent directory to path so we can import app_scraper
+# Add parent directory to path so we can import from features.scraping
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app_scraper import setup_chrome_driver, login_to_lcr
+from features.scraping.scraper import setup_chrome_driver, login_to_lcr
 
 
 def print_progress(message, **kwargs):

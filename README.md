@@ -1,8 +1,8 @@
 # 📅 Ministering Interview Scheduler
 
-> A comprehensive web application for managing ministering interviews in LDS church wards. Built with Flask, featuring automated scheduling, notifications, and intelligent data scraping from LCR.
+> A comprehensive web application for managing ministering interviews in LDS church wards. Built with Flask, featuring automated scheduling, notifications, and optional LCR data scraping.
 
-[![Built with AI](https://img.shields.io/badge/Built%20with-AI%20(Claude)-5865F2?style=flat-square)](https://claude.ai) 
+[![Built with AI](https://img.shields.io/badge/Built%20with-AI%20(Claude)-5865F2?style=flat-square)](https://claude.ai)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.0+-green?style=flat-square)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
@@ -11,7 +11,46 @@
 
 ## 🎯 Overview
 
-This application streamlines the process of scheduling and conducting quarterly ministering interviews in LDS wards. It automatically scrapes companionship data from the LDS Church's LCR website, manages interview time slots, sends notifications via email and SMS, and allows members to self-schedule their interviews online.
+This application streamlines the process of scheduling and conducting quarterly ministering interviews in LDS wards. It manages interview time slots, sends notifications via email (and optionally SMS), and allows members to self-schedule their interviews online.
+
+---
+
+## 📦 Two Editions Available
+
+The app comes in two editions to fit your deployment needs:
+
+| Feature | Minimal App (`app.py`) | Full App (`app_full.py`) |
+|---------|------------------------|--------------------------|
+| Core scheduling & booking | ✅ | ✅ |
+| Email notifications | ✅ | ✅ |
+| CSV data import | ✅ | ✅ |
+| LCR data import | 📂 Use Local Scraper on your PC | ✅ Server-side scraping |
+| SMS notifications | 📱 Use Flutter App on your phone | ✅ Twilio/AWS/SignalWire |
+| Docker image size | ~400MB | ~1.2GB |
+| Memory footprint | Low | Higher |
+| **Best for** | Free-tier hosting (PythonAnywhere, Oracle Cloud) | Full-featured deployments |
+
+### Minimal App Workflow
+
+If you choose the Minimal App, you can still get full functionality using companion tools:
+
+1. **LCR Data Import**: Use the **Local Scraper** (`local-scraper/`) on your Windows PC to scrape LCR data. It generates a CSV file you can upload through the web app's CSV import.
+
+2. **SMS & Email Notifications**: Use the **Flutter Mobile App** to handle notifications. The app pulls pending notifications from the web API and sends them using your phone's native SMS and email capabilities - no SMS gateway costs!
+
+### Full App Workflow
+
+The Full App handles everything server-side:
+- Scrapes LCR directly from the web interface
+- Sends SMS via Twilio, AWS SNS, or SignalWire
+- Sends email via SMTP
+
+### Which Files to Use
+
+| Edition | Entry Point | Requirements | Dockerfile |
+|---------|-------------|--------------|------------|
+| Minimal | `app.py` | `requirements.txt` | `Dockerfile` |
+| Full | `app_full.py` | `requirements-full.txt` | `Dockerfile.full` |
 
 **🤖 Note:** This application was created almost 100% using AI assistance (Initailly Grok Code fast 1 and then Claude Code by Anthropic). From the initial concept to the final implementation, AI guided the architecture, wrote the code, designed the database schema, and implemented features. This showcases the power of AI-assisted development in creating full-featured web applications.
 
@@ -19,9 +58,10 @@ This application streamlines the process of scheduling and conducting quarterly 
 
 ## ✨ Key Features
 
-### 👥 **Automated Data Import**
-- **LCR Web Scraping**: Automatically extract companionship data from the Church's LCR website using Selenium
-- **CSV Import**: Alternative manual import option for flexibility
+### 👥 **Data Import**
+- **LCR Web Scraping** *(Full App)*: Automatically extract companionship data from the Church's LCR website
+- **Local Scraper** *(Minimal App)*: Run on your Windows PC to generate CSV for upload
+- **CSV Import** *(Both)*: Manual import option for flexibility
 - **Smart Matching**: Automatically matches and updates existing members by email to prevent duplicates
 - **Preview Before Import**: Review all data before committing changes
 
@@ -32,13 +72,13 @@ This application streamlines the process of scheduling and conducting quarterly 
 - **Quarter-Based Organization**: Automatically organizes slots by calendar quarters
 - **Conflict Prevention**: Prevents overlapping or duplicate bookings
 
-### 📧 **Multi-Channel Notifications**
-- **Email Notifications**: Configurable SMTP support (Gmail, Outlook, etc.)
-- **SMS Integration**: Support for three providers:
+### 📧 **Notifications**
+- **Email Notifications** *(Both)*: Configurable SMTP support (Gmail, Outlook, etc.)
+- **Server-Side SMS** *(Full App)*: Support for three providers:
   - **AWS SNS** (Recommended - lowest cost ~$1.94/month)
   - **Twilio** (Most reliable - ~$4.47/month)
   - **SignalWire** (Best features/cost - ~$2.10/month)
-- **1-Way & 2-Way Messaging**: Choose between simple one-way notifications or advanced two-way communication
+- **Flutter Mobile App** *(Minimal App)*: Send SMS/email from your phone at zero cost
 - **Personal Contact Info**: Include admin contact details in messages for direct replies
 - **Test Functionality**: Send test emails and SMS with detailed error reporting
 
@@ -82,30 +122,46 @@ This application streamlines the process of scheduling and conducting quarterly 
 
 1. **Clone or download the repository:**
    ```bash
-   git clone https://github.com/yourusername/Ministering-Interviews.git
+   git clone https://github.com/jtkelley/Ministering-Interviews.git
    cd Ministering-Interviews
    ```
 
-2. **Install dependencies:**
+2. **Choose your edition and install dependencies:**
+
+   **For Minimal App** (recommended for most users):
    ```bash
    pip install -r requirements.txt
-   ```
-
-3. **Run the application:**
-   ```bash
    python app.py
    ```
 
-   That's it! The app includes a `.env` file with development settings, so it works immediately.
+   **For Full App** (with LCR scraping and SMS):
+   ```bash
+   pip install -r requirements-full.txt
+   python app_full.py
+   ```
 
-4. **Access the application:**
+3. **Access the application:**
    Open your browser to `http://localhost:8181`
 
-5. **Complete setup through the web interface:**
+4. **Complete setup through the web interface:**
    - All configuration (email, SMS, scheduler) is done through the web UI
    - Navigate to **Admin → System Settings** after first login
 
-**Note**: The `.env` file is included in the repository with a development-only SECRET_KEY. When deployed to production (Render, etc.), the platform provides its own secure SECRET_KEY that overrides the development value.
+### Docker Deployment
+
+**Minimal App:**
+```bash
+docker build -f Dockerfile -t ministering-min .
+docker run -p 8181:8181 ministering-min
+```
+
+**Full App:**
+```bash
+docker build -f Dockerfile.full -t ministering-full .
+docker run -p 8181:8181 ministering-full
+```
+
+**Note**: The `.env` file is included in the repository with a development-only SECRET_KEY. When deployed to production, the platform provides its own secure SECRET_KEY that overrides the development value.
 
 ---
 
@@ -119,21 +175,27 @@ This application streamlines the process of scheduling and conducting quarterly 
    - Add your email and app password
    - Click "Send Test Email" to verify
 
-2. **Configure SMS Settings (Optional but Recommended):**
+2. **Configure SMS Settings (Full App only, or use Flutter App):**
    - Navigate to **Admin → System Settings → SMS**
    - Click "📖 SMS Provider Setup Guide & Cost Comparison" for detailed instructions
    - Choose your provider (AWS SNS recommended for lowest cost)
    - Select **1-Way Messaging** for simplest setup
    - Enter your personal contact info for member replies
    - Test with "Send Test SMS"
+   - **Alternative**: Use the Flutter mobile app to send notifications from your phone (no SMS gateway costs!)
 
 3. **Import Companionship Data:**
-   - Navigate to **Admin → Scrape from LCR** (recommended)
-     - Enter your LDS Account credentials
-     - Select your ward
-     - Review the preview
-     - Confirm import
-   - Or use **Admin → Import from CSV** for manual upload
+
+   **Full App:** Navigate to **Admin → Scrape from LCR**
+   - Enter your LDS Account credentials
+   - Select your ward
+   - Review the preview and confirm import
+
+   **Minimal App:** Use the Local Scraper + CSV Import
+   - Run `local-scraper/run_local_scraper.bat` on your Windows PC
+   - Log into LCR when the browser opens
+   - Save the generated CSV file
+   - Upload via **Admin → Import from CSV** in the web app
 
 ### Regular Usage Workflow
 
@@ -168,19 +230,69 @@ This application streamlines the process of scheduling and conducting quarterly 
 
 ---
 
+## 🛠️ Companion Tools
+
+These standalone tools extend the Minimal App to provide full functionality without server-side dependencies.
+
+### Local Scraper (Windows)
+
+A desktop tool that scrapes LCR data using your local Chrome browser and saves it as a CSV file for upload to the web app.
+
+**Location:** `local-scraper/`
+
+**Usage:**
+```bash
+cd local-scraper
+run_local_scraper.bat
+```
+
+**Features:**
+- Opens a visible Chrome window so you can log into LCR
+- Extracts all companionship data (districts, members, contact info)
+- Saves to CSV format compatible with the web app's import
+- Runs entirely on your PC - no server-side Chrome needed
+
+**Requirements:**
+- Windows PC with Chrome installed
+- Python 3.9+ with packages from `local_requirements.txt`
+
+### Flutter Mobile App
+
+A mobile app that handles notifications using your phone's native SMS and email capabilities.
+
+**Location:** `flutter_app/`
+
+**Features:**
+- Pulls pending notifications from the web app's API
+- Sends SMS using your phone's messaging app (no Twilio costs!)
+- Sends email using your phone's email client
+- Works offline - queue notifications and send when ready
+- Push notifications for new booking activity
+
+**Why use it:**
+- **Zero SMS costs** - uses your phone's unlimited texting plan
+- **No API keys needed** - no Twilio/AWS/SignalWire setup
+- **Works with Minimal App** - full notification capability without server dependencies
+
+---
+
 ## 🏗️ Architecture
 
 ### Technology Stack
+
+**Core (Both Editions):**
 - **Backend**: Flask 3.0 (Python web framework)
-- **Database**: SQLite 
+- **Database**: SQLite (PostgreSQL recommended for production)
 - **ORM**: SQLAlchemy (database abstraction)
 - **Authentication**: Flask-User (user management and roles)
-- **Web Scraping**: Selenium (Chrome/ChromeDriver)
 - **Email**: Flask-Mail (SMTP integration)
-- **SMS**: boto3 (AWS), twilio, signalwire (SMS providers)
-- **Security**: cryptography (Fernet encryption)
+- **Security**: cryptography (Fernet encryption for credentials)
 - **Scheduling**: APScheduler (automated reminders)
 - **Frontend**: Bootstrap 5, JavaScript, Jinja2 templates
+
+**Full App Additional:**
+- **Web Scraping**: Selenium + ChromeDriver
+- **SMS**: boto3 (AWS SNS), twilio, signalwire
 
 ### Database Schema
 
@@ -201,28 +313,62 @@ This application streamlines the process of scheduling and conducting quarterly 
 - InterviewSlot → Bookings (one-to-many with capacity limit)
 
 ### Project Structure
+
 ```
 Ministering-Interviews/
-├── app.py                      # Main Flask application
-├── app_scraper.py              # Web scraping module
-├── local_scraper.py            # Local testing scraper
-├── requirements.txt            # Python dependencies
+├── app.py                      # Minimal app entry point
+├── app_full.py                 # Full app entry point (with scraping + SMS)
+├── requirements.txt            # Minimal dependencies
+├── requirements-full.txt       # Full dependencies (includes Selenium, Twilio, etc.)
+├── Dockerfile                  # Minimal Docker build (~400MB)
+├── Dockerfile.full             # Full Docker build (~1.2GB with Chrome)
+│
+├── core/                       # Shared code between both editions
+│   ├── __init__.py
+│   ├── config.py               # App configuration
+│   ├── models.py               # All database models
+│   ├── services.py             # Email notification services
+│   ├── shared.py               # Shared resources (mail, progress_store)
+│   ├── import_merge.py         # CSV/data import logic
+│   ├── utils/                  # Utility functions
+│   │   ├── decorators.py       # @admin_required decorator
+│   │   ├── encryption.py       # EncryptionHelper for credentials
+│   │   └── helpers.py          # Helper functions
+│   └── routes/                 # Core route blueprints
+│       ├── public.py           # Public scheduling routes
+│       ├── admin.py            # Admin routes
+│       └── api.py              # API routes for Flutter app
+│
+├── features/                   # Optional feature modules (Full app only)
+│   ├── scraping/               # LCR web scraping
+│   │   ├── scraper.py          # Selenium scraping logic
+│   │   └── routes.py           # Scraping route blueprint
+│   └── sms/                    # SMS notifications
+│       └── services.py         # Twilio/AWS/SignalWire integration
+│
+├── local-scraper/              # Standalone Windows scraper tool
+│   ├── local_scraper.py        # Run on your PC to generate CSV
+│   ├── run_local_scraper.bat   # Windows batch launcher
+│   └── local_requirements.txt  # Scraper-only dependencies
+│
+├── flutter_app/                # Mobile app for notifications
+│   └── ...                     # Flutter project files
+│
+├── templates/                  # Jinja2 HTML templates
+│   ├── base.html               # Base layout with navbar
+│   ├── admin_dashboard.html    # Main admin view
+│   ├── schedule.html           # Member scheduling
+│   ├── system_settings.html    # Configuration
+│   └── ...
+│
+├── instance/                   # Database (gitignored)
+│   └── interviews.db           # SQLite database
+│
+├── docs/                       # Documentation
+│   └── MODULAR_ARCHITECTURE.md # Architecture details
 ├── CLAUDE.md                   # AI coding instructions
 ├── README.md                   # This file
-├── DEPLOYMENT.md               # Deployment guide
-├── sms_guide.md                # SMS provider comparison
-├── templates/                  # Jinja2 HTML templates
-│   ├── base.html              # Base layout with navbar
-│   ├── admin_dashboard.html   # Main admin view
-│   ├── district_detail.html   # District management
-│   ├── manage_slots.html      # Slot generation
-│   ├── schedule.html          # Member scheduling
-│   ├── system_settings.html   # Configuration
-│   └── ...
-├── static/                     # CSS, JS, images (if any)
-├── instance/                   # Database and instance files
-│   └── interviews.db          # SQLite database (gitignored)
-└── csv/                        # CSV import files (gitignored)
+└── DEPLOYMENT.md               # Deployment guide
 ```
 
 ---
@@ -241,7 +387,7 @@ Email, SMS, and scheduler settings are stored encrypted in the database. No `.en
 - From address and display name
 - Test email functionality
 
-#### **📱 SMS Settings**
+#### **📱 SMS Settings (Full App Only)**
 - **SMS Mode:**
   - **1-Way**: Simple notifications, replies to personal phone
   - **2-Way**: Advanced automation with webhook support (Phase 2)
@@ -251,6 +397,8 @@ Email, SMS, and scheduler settings are stored encrypted in the database. No `.en
 - **Provider Setup Guide:** Built-in instructions and cost comparison
 - **Test SMS:** Send test with detailed error reporting
 
+> **Minimal App users:** Use the Flutter mobile app for SMS - no server-side SMS configuration needed!
+
 #### **⏰ Scheduler Settings**
 - Enable/disable automated reminders
 - Set day of week and time for reminders
@@ -258,9 +406,11 @@ Email, SMS, and scheduler settings are stored encrypted in the database. No `.en
 
 ---
 
-## 📱 SMS Provider Setup
+## 📱 SMS Provider Setup (Full App Only)
 
-The application includes a comprehensive in-app guide with cost comparisons and setup instructions. Here's a quick overview:
+> **Using Minimal App?** Skip this section! Use the Flutter mobile app to send SMS notifications from your phone at zero cost.
+
+The Full App includes a comprehensive in-app guide with cost comparisons and setup instructions. Here's a quick overview:
 
 ### Recommended: AWS SNS (1-Way Messaging)
 
@@ -297,44 +447,67 @@ The application includes a comprehensive in-app guide with cost comparisons and 
 
 ## 🚢 Deployment
 
-### DigitalOcean App Platform (Recommended)
+### Choosing Your Deployment
 
-1. **Push to GitHub:**
+| Platform | Best For | Edition | Cost |
+|----------|----------|---------|------|
+| **PythonAnywhere** | Beginners, free tier | Minimal | Free |
+| **Oracle Cloud** | Free tier with more resources | Minimal | Free |
+| **Render** | Easy deployment, free tier | Minimal | Free |
+| **DigitalOcean** | Full features, reliable | Full | ~$5/mo |
+| **Self-hosted VPS** | Full control | Either | Varies |
+
+### PythonAnywhere (Free - Minimal App)
+
+Great for getting started with zero cost:
+
+1. **Create account** at [PythonAnywhere](https://www.pythonanywhere.com)
+2. **Open a Bash console** and clone the repo:
    ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/yourusername/Ministering-Interviews.git
-   git push -u origin main
+   git clone https://github.com/jtkelley/Ministering-Interviews.git
+   cd Ministering-Interviews
+   pip install --user -r requirements.txt
    ```
+3. **Create a Web App:**
+   - Go to Web tab → Add new web app
+   - Choose Flask and Python 3.9+
+   - Set source code path to `/home/yourusername/Ministering-Interviews`
+   - Set WSGI file to point to `app.py`
+4. **Reload** and access your app!
 
+**Note:** Free tier doesn't support SSH/SFTP, but you can clone from GitHub directly.
+
+### Docker Deployment (Any Platform)
+
+**Minimal App (~400MB image):**
+```bash
+docker build -f Dockerfile -t ministering-min .
+docker run -p 8181:8181 -v ./instance:/app/instance ministering-min
+```
+
+**Full App (~1.2GB image with Chrome):**
+```bash
+docker build -f Dockerfile.full -t ministering-full .
+docker run -p 8181:8181 -v ./instance:/app/instance ministering-full
+```
+
+### DigitalOcean App Platform (Full App)
+
+1. **Push to GitHub** (if not already)
 2. **Create DigitalOcean App:**
    - Sign up at [DigitalOcean](https://www.digitalocean.com)
    - Create new App from GitHub repository
-   - Choose "Web Service" type
-   - Set build command: `pip install -r requirements.txt`
-   - Set run command: `python app.py`
+   - Set Dockerfile path: `Dockerfile.full`
+3. **Configure Environment Variables:**
+   - `DATABASE_URL` - PostgreSQL connection string (recommended)
+4. **Deploy and configure** via web UI
 
-3. **Configure Environment Variables (Optional):**
-   - `DATABASE_URL` - If using PostgreSQL instead of SQLite (recommended for production)
-   - **Note:** Email and SMS credentials are configured through the web UI, not environment variables!
+### Other Options
 
-4. **Deploy:**
-   - Click "Deploy" and wait for build to complete
-   - Access your app at the provided URL
-
-5. **Configure via Web UI:**
-   - Log in to admin panel
-   - Navigate to **System Settings**
-   - Configure Email, SMS, and Scheduler settings
-   - All credentials are encrypted and stored in the database
-
-### Other Deployment Options
-
-- **Heroku**: Similar to DigitalOcean, supports PostgreSQL
-- **PythonAnywhere**: Good for small projects, SQLite works
-- **AWS Elastic Beanstalk**: Enterprise-grade, more complex
-- **VPS (Linux)**: DigitalOcean Droplet, Linode, etc.
+- **Oracle Cloud Free Tier**: 1GB memory ARM instances - use Minimal App
+- **Render**: Free tier available - use Minimal App
+- **Heroku**: Supports both editions with appropriate buildpacks
+- **VPS (Linux)**: Full control with DigitalOcean Droplet, Linode, etc.
 
 See `DEPLOYMENT.md` for detailed deployment instructions.
 
@@ -414,10 +587,11 @@ Contributions are welcome! Since this was built with AI, it's a great opportunit
 - [ ] Implement Phase 2: 2-Way SMS with webhook support
 - [ ] Add calendar export (ICS files for Outlook/Google Calendar)
 - [ ] Multi-language support (Spanish, Portuguese, etc.)
-- [ ] Mobile app (React Native or Flutter)
+- [x] Mobile app (Flutter) - ✅ Implemented!
 - [ ] Advanced reporting and analytics
 - [ ] Integration with other LCR features
 - [ ] Dark mode theme toggle
+- [ ] macOS/Linux support for Local Scraper
 
 ---
 
@@ -425,27 +599,31 @@ Contributions are welcome! Since this was built with AI, it's a great opportunit
 
 ### Common Issues:
 
-**1. ChromeDriver version mismatch (web scraping fails)**
-- **Solution**: Update Chrome and ChromeDriver version numbers in `app_scraper.py:54-55`
+**1. ChromeDriver version mismatch (Full App - web scraping fails)**
+- **Solution**: The Docker build auto-downloads matching ChromeDriver
+- For local development, update version in `features/scraping/scraper.py`
 
-**2. SMS test fails with credentials error**
+**2. SMS test fails with credentials error (Full App)**
 - **Solution**: Check System Settings → SMS for correct API keys
 - Use the "Send Test SMS" detailed error messages for troubleshooting hints
+- **Alternative**: Use Flutter app for SMS instead
 
-**3. Flash messages appearing on wrong pages**
-- **Fixed**: Removed duplicate `get_flashed_messages()` calls from templates
-
-**4. Email not sending**
+**3. Email not sending**
 - **Gmail Users**: Enable "Less secure app access" or use App Password
 - **Outlook Users**: May need to verify device
 - **Test**: Use "Send Test Email" button in settings
 
-**5. Database locked errors**
+**4. Database locked errors**
 - **Cause**: SQLite doesn't handle concurrent writes well
 - **Solution**: Switch to PostgreSQL for production
 
-**6. Tabs reset after saving settings**
-- **Fixed**: Implemented sticky tabs with URL hash fragments
+**5. Import errors on Minimal App**
+- **Cause**: Trying to access scraping features that aren't available
+- **Solution**: Use `app.py` (not `app_full.py`) and import via CSV
+
+**6. Local Scraper won't start**
+- **Cause**: Chrome not installed or wrong version
+- **Solution**: Install latest Chrome, run `pip install -r local_requirements.txt`
 
 ---
 
@@ -453,14 +631,14 @@ Contributions are welcome! Since this was built with AI, it's a great opportunit
 
 - **CLAUDE.md** - Instructions for AI when working with this codebase
 - **DEPLOYMENT.md** - Detailed deployment guides for various platforms
-- **sms_guide.md** - Comprehensive SMS provider comparison and setup guide
+- **docs/MODULAR_ARCHITECTURE.md** - Details on the min/full app architecture
+- **sms_guide.md** - Comprehensive SMS provider comparison and setup guide (Full App)
 
 ---
 
 ## 💬 Support
 
-- **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/yourusername/Ministering-Interviews/issues)
-- **Email**: contact@example.com
+- **Issues**: Report bugs or request features via [GitHub Issues](https://github.com/jtkelley/Ministering-Interviews/issues)
 - **Documentation**: Check the in-app help guides and tooltips
 
 ---

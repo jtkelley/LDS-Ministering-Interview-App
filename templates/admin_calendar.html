@@ -16,12 +16,14 @@
             </div>
             
             <div class="row mt-3 g-3">
+                {% if features.scraping %}
                 <div class="col-md-4">
-                    <a href="{{ url_for('admin.scrape_data') }}" class="btn btn-primary w-100">
+                    <a href="{{ url_for('scraping.scrape_data') }}" class="btn btn-primary w-100">
                         <strong>📱 Scrape from LCR</strong>
                         <small class="d-block mt-1">Import Districts and companionships directly from LDS.org</small>
                     </a>
                 </div>
+                {% endif %}
                 <div class="col-md-4">
                     <a href="{{ url_for('admin.import_csv') }}" class="btn btn-primary w-100">
                         <strong>📄 Import from CSV</strong>

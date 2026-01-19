@@ -7,7 +7,7 @@
         
         <div class="alert alert-success">
             <strong>Success!</strong> Found {{ scraped_districts|length }} districts with companionships. Review the data below and confirm import.
-            {% if progress_id %}<br><a href="{{ url_for('admin.download_csv', progress_id=progress_id) }}" class="btn btn-info btn-sm mt-2">Download CSV</a>{% endif %}
+            {% if progress_id %}<br><a href="{{ url_for('scraping.download_csv', progress_id=progress_id) if confirm_endpoint == 'scraping.import_confirm' else url_for('admin.download_csv', progress_id=progress_id) }}" class="btn btn-info btn-sm mt-2">Download CSV</a>{% endif %}
         </div>
         
         <form method="POST" action="{{ url_for(confirm_endpoint) }}">
@@ -57,6 +57,6 @@
             </div>
             
             <button type="submit" name="confirm_import" class="btn btn-success">Import All Data</button>
-            <a href="{{ url_for('admin.scrape_data') if confirm_endpoint == 'admin.import_confirm' else url_for('admin.import_csv') }}" class="btn btn-secondary">Start Over</a>
+            <a href="{{ url_for('scraping.scrape_data') if confirm_endpoint == 'scraping.import_confirm' else url_for('admin.import_csv') }}" class="btn btn-secondary">Start Over</a>
         </form>
 {% endblock %}
