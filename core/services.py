@@ -7,6 +7,31 @@ from flask_mail import Message
 from datetime import datetime
 
 
+def html_to_plain_text(html):
+    """Convert HTML to plain text for email fallback.
+    Converts <br> and </p> to newlines, extracts links, then strips remaining tags.
+    """
+    # Convert <a href="url">text</a> to "text: url" or just "url" if text matches
+    def replace_link(match):
+        url = match.group(1)
+        text = match.group(2)
+        # If link text is just "click here" style, show both text and URL
+        if text.lower() != url.lower():
+            return f"{text}\n{url}"
+        return url
+    text = re.sub(r'<a\s+href=["\']([^"\']+)["\'][^>]*>([^<]+)</a>', replace_link, html, flags=re.IGNORECASE)
+
+    # Convert <br> and <br/> to newlines
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    # Convert </p> to double newline (paragraph break)
+    text = re.sub(r'</p>\s*', '\n\n', text, flags=re.IGNORECASE)
+    # Remove remaining HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Clean up extra whitespace
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 def apply_email_config():
     """Load email config from database and apply to Flask app config"""
     from core.models import SystemConfig
@@ -145,7 +170,7 @@ def send_booking_reminders():
                             recipients=[member.email]
                         )
                         msg.html = body
-                        msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
+                        msg.body = html_to_plain_text(body)
                         mail.send(msg)
                         email_sent += 1
                     except Exception as e:

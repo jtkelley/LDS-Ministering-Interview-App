@@ -14,6 +14,7 @@ class MembersProvider with ChangeNotifier {
   Set<int> _selectedMemberIds = {};
   int? _filterDistrictId;
   bool _filterNeedsInviteOnly = true;
+  String _searchQuery = '';
   int _currentQuarter = 1;
   int _currentYear = 2024;
   bool _isLoading = false;
@@ -29,19 +30,30 @@ class MembersProvider with ChangeNotifier {
   Set<int> get selectedMemberIds => _selectedMemberIds;
   int? get filterDistrictId => _filterDistrictId;
   bool get filterNeedsInviteOnly => _filterNeedsInviteOnly;
+  String get searchQuery => _searchQuery;
   int get currentQuarter => _currentQuarter;
   int get currentYear => _currentYear;
   bool get isLoading => _isLoading;
   String? get error => _error;
   InviteService get inviteService => _inviteService;
 
+  /// Get members filtered by search query
+  List<Member> get filteredMembers {
+    if (_searchQuery.isEmpty) return _members;
+    final query = _searchQuery.toLowerCase();
+    return _members.where((m) => m.name.toLowerCase().contains(query)).toList();
+  }
+
   /// Get selected members
   List<Member> get selectedMembers =>
       _members.where((m) => _selectedMemberIds.contains(m.id)).toList();
 
-  /// Check if all members are selected
-  bool get allSelected =>
-      _members.isNotEmpty && _selectedMemberIds.length == _members.length;
+  /// Check if all filtered members are selected
+  bool get allSelected {
+    final filtered = filteredMembers;
+    return filtered.isNotEmpty &&
+           filtered.every((m) => _selectedMemberIds.contains(m.id));
+  }
 
   /// Load districts
   Future<void> loadDistricts() async {
@@ -95,6 +107,18 @@ class MembersProvider with ChangeNotifier {
     loadMembers();
   }
 
+  /// Set search query for filtering members by name
+  void setSearchQuery(String query) {
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  /// Clear search query
+  void clearSearch() {
+    _searchQuery = '';
+    notifyListeners();
+  }
+
   /// Toggle member selection
   void toggleMemberSelection(int memberId) {
     if (_selectedMemberIds.contains(memberId)) {
@@ -105,15 +129,16 @@ class MembersProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Select all members
+  /// Select all filtered members
   void selectAll() {
-    _selectedMemberIds = _members.map((m) => m.id).toSet();
+    _selectedMemberIds.addAll(filteredMembers.map((m) => m.id));
     notifyListeners();
   }
 
-  /// Deselect all members
+  /// Deselect all filtered members
   void deselectAll() {
-    _selectedMemberIds.clear();
+    final filteredIds = filteredMembers.map((m) => m.id).toSet();
+    _selectedMemberIds.removeAll(filteredIds);
     notifyListeners();
   }
 

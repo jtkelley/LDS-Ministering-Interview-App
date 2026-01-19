@@ -393,7 +393,7 @@ def send_bulk_email():
             subject, body = services.format_email_notification(member, link, quarter, year)
             msg = Message(subject, sender=sender_email, recipients=[member.email])
             msg.html = body
-            msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
+            msg.body = services.html_to_plain_text(body)
             mail.send(msg)
 
             # Log the notification
@@ -496,7 +496,8 @@ def get_message_templates():
     org_name = msg_config.format_org_name()
     greeting = msg_config.format_greeting()
     instructions = msg_config.format_instructions()
-    signature = msg_config.format_signature()
+    signature_html = msg_config.format_signature(for_html=True)
+    signature_plain = msg_config.format_signature(for_html=False)
 
     # Get stored templates (or defaults)
     sms_template = msg_config.sms_template or DEFAULT_SMS
@@ -508,7 +509,8 @@ def get_message_templates():
     sms_rendered = sms_template.replace('{name}', '{{name}}').replace('{link}', '{{link}}').format(
         org_name=org_name,
         greeting=greeting,
-        instructions=instructions
+        instructions=msg_config.format_instructions(for_sms=True),
+        signature=signature_plain
     ).replace('{{name}}', '{name}').replace('{{link}}', '{link}')
 
     email_subject_rendered = email_subject.format(
@@ -523,7 +525,7 @@ def get_message_templates():
         quarter=quarter,
         year=year,
         instructions=instructions,
-        signature=signature
+        signature=signature_html
     ).replace('{{name}}', '{name}').replace('{{link}}', '{link}')
 
     # Clean up extra blank lines (allow one blank line, collapse multiple)
@@ -539,7 +541,7 @@ def get_message_templates():
         'custom_instructions': msg_config.custom_instructions or '',
         'signature_name': msg_config.signature_name or '',
         'signature_title': msg_config.signature_title or '',
-        'signature': signature,
+        'signature': signature_plain,
         'quarter': quarter,
         'year': year,
         # Partially rendered templates - {name} and {link} remain as placeholders

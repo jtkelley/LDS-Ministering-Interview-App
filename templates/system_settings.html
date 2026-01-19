@@ -721,6 +721,16 @@
                                 </div>
 
                                 <!-- Live Preview -->
+                                {% set org_prefix = (msg_config.organization_name + ' - ') if msg_config.organization_name else '' %}
+                                {% set greeting = (msg_config.greeting_style + ' ') if msg_config.greeting_style and msg_config.greeting_style != 'None' else '' %}
+                                {% set sample_name = 'John Smith' %}
+                                {% set sample_link = 'https://example.com/schedule/abc123' %}
+                                {% set quarter = 'Q1' %}
+                                {% set year = '2026' %}
+                                {% set sig_parts = [] %}
+                                {% if msg_config.signature_name %}{% set _ = sig_parts.append(msg_config.signature_name) %}{% endif %}
+                                {% if msg_config.signature_title %}{% set _ = sig_parts.append(msg_config.signature_title) %}{% endif %}
+                                {% set signature = sig_parts | join('\n') %}
                                 <div class="col-lg-6">
                                     <div class="card bg-light">
                                         <div class="card-header">
@@ -728,18 +738,21 @@
                                         </div>
                                         <div class="card-body" style="font-family: monospace; font-size: 13px;">
                                             <div class="mb-2">
-                                                <strong>Subject:</strong> <span id="preview_subject">Ministering Interview - Q1 2026</span>
+                                                <strong>Subject:</strong> <span id="preview_subject">{{ org_prefix }}Ministering Interview - {{ quarter }} {{ year }}</span>
                                             </div>
                                             <hr>
-                                            <pre id="preview_body" style="white-space: pre-wrap; margin: 0; font-family: inherit;">Dear John Smith,
+                                            <pre id="preview_body" style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{ greeting }}{{ sample_name }},
 
-Interview slots are now available for the current quarter (Q1 2026).
+Interview slots are now available for the current quarter ({{ quarter }} {{ year }}).
 
 Please click the link below to schedule your interview:
 
-https://example.com/schedule/abc123
+{{ sample_link }}
 
-Thank you,</pre>
+{% if msg_config.custom_instructions %}{{ msg_config.custom_instructions }}
+
+{% endif %}Thank you,{% if signature %}
+{{ signature }}{% endif %}</pre>
                                         </div>
                                     </div>
 
@@ -748,8 +761,12 @@ Thank you,</pre>
                                             <strong>SMS Preview</strong>
                                         </div>
                                         <div class="card-body" style="font-family: monospace; font-size: 13px;">
-                                            <pre id="preview_sms" style="white-space: pre-wrap; margin: 0; font-family: inherit;">Ministering Interview
-Dear John Smith, schedule your interview: https://example.com/schedule/abc123</pre>
+                                            <pre id="preview_sms" style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{ org_prefix }}Ministering Interview
+{{ greeting }}{{ sample_name }}, schedule your interview: {{ sample_link }}{% if msg_config.custom_instructions %}
+
+{{ msg_config.custom_instructions }}{% endif %}{% if signature %}
+
+{{ signature }}{% endif %}</pre>
                                             <small class="text-muted mt-2 d-block">
                                                 <span id="sms_char_count">0</span> characters
                                             </small>
@@ -773,6 +790,11 @@ Dear John Smith, schedule your interview: https://example.com/schedule/abc123</p
         </div>
 
 <script>
+// Database templates for preview rendering
+const EMAIL_SUBJECT_TEMPLATE = {{ (msg_config.email_subject_template or '')|tojson }};
+const EMAIL_BODY_TEMPLATE = {{ (msg_config.email_body_template or '')|tojson }};
+const SMS_TEMPLATE = {{ (msg_config.sms_template or '')|tojson }};
+
 // SMS Mode Toggle
 function toggleSMSMode() {
     const oneWay = document.getElementById('sms_mode_one_way').checked;
@@ -860,6 +882,13 @@ function updateCharCount() {
     if (textarea && charCount) {
         charCount.textContent = textarea.value.length;
     }
+
+    // Also update SMS character count from the preview content
+    const smsEl = document.getElementById('preview_sms');
+    const smsCharEl = document.getElementById('sms_char_count');
+    if (smsEl && smsCharEl) {
+        smsCharEl.textContent = smsEl.textContent.length;
+    }
 }
 
 function updateMessagePreview() {
@@ -871,52 +900,93 @@ function updateMessagePreview() {
 
     const sampleName = 'John Smith';
     const sampleLink = 'https://example.com/schedule/abc123';
-    const quarter = 'Q1';
-    const year = '2026';
+    const quarter = 1;
+    const year = new Date().getFullYear();
 
-    // Format org name for subject
+    // Format values for template substitution
     const orgPrefix = orgName ? orgName + ' - ' : '';
-
-    // Format greeting
     const greeting = (greetingStyle && greetingStyle !== 'None') ? greetingStyle + ' ' : '';
 
-    // Format signature
-    let signature = '';
-    if (signatureName) signature += signatureName;
-    if (signatureTitle) signature += (signature ? '\n' : '') + signatureTitle;
+    // Format instructions (HTML for email, plain for SMS)
+    const instructionsHtml = customInstructions ? `<p>${customInstructions}</p>` : '';
+    const instructionsPlain = customInstructions || '';
 
-    // Update email subject preview
+    // Format signature (HTML with <br> for email, newlines for SMS)
+    let signatureHtml = '';
+    let signaturePlain = '';
+    if (signatureName) {
+        signatureHtml += signatureName;
+        signaturePlain += signatureName;
+    }
+    if (signatureTitle) {
+        signatureHtml += (signatureHtml ? '<br>' : '') + signatureTitle;
+        signaturePlain += (signaturePlain ? '\n' : '') + signatureTitle;
+    }
+
+    // Helper to replace template placeholders
+    function renderTemplate(template, replacements) {
+        let result = template;
+        for (const [key, value] of Object.entries(replacements)) {
+            result = result.split('{' + key + '}').join(value);
+        }
+        return result;
+    }
+
+    // Helper to convert HTML to plain text for preview display
+    function htmlToPlainText(html) {
+        // Extract link URLs from <a> tags
+        let text = html.replace(/<a\s+href=["']([^"']+)["'][^>]*>([^<]+)<\/a>/gi, '$2\n$1');
+        // Convert <br> to newlines
+        text = text.replace(/<br\s*\/?>/gi, '\n');
+        // Convert </p> to double newlines
+        text = text.replace(/<\/p>\s*/gi, '\n\n');
+        // Remove remaining HTML tags
+        text = text.replace(/<[^>]+>/g, '');
+        // Clean up extra whitespace
+        text = text.replace(/\n{3,}/g, '\n\n');
+        return text.trim();
+    }
+
+    // Render email subject from template
     const subjectEl = document.getElementById('preview_subject');
-    if (subjectEl) {
-        subjectEl.textContent = `${orgPrefix}Ministering Interview - ${quarter} ${year}`;
+    if (subjectEl && EMAIL_SUBJECT_TEMPLATE) {
+        const subject = renderTemplate(EMAIL_SUBJECT_TEMPLATE, {
+            org_name: orgPrefix,
+            quarter: quarter,
+            year: year
+        });
+        subjectEl.textContent = subject;
     }
 
-    // Update email body preview
+    // Render email body from template (convert HTML to plain text for display)
     const bodyEl = document.getElementById('preview_body');
-    if (bodyEl) {
-        let body = `${greeting}${sampleName},\n\n`;
-        body += `Interview slots are now available for the current quarter (${quarter} ${year}).\n\n`;
-        body += `Please click the link below to schedule your interview:\n\n`;
-        body += `${sampleLink}\n\n`;
-        if (customInstructions) {
-            body += `${customInstructions}\n\n`;
-        }
-        body += `Thank you,`;
-        if (signature) {
-            body += `\n${signature}`;
-        }
-        bodyEl.textContent = body;
+    if (bodyEl && EMAIL_BODY_TEMPLATE) {
+        const bodyHtml = renderTemplate(EMAIL_BODY_TEMPLATE, {
+            greeting: greeting,
+            name: sampleName,
+            quarter: quarter,
+            year: year,
+            link: sampleLink,
+            instructions: instructionsHtml,
+            signature: signatureHtml
+        });
+        bodyEl.textContent = htmlToPlainText(bodyHtml);
     }
 
-    // Update SMS preview
+    // Render SMS from template
     const smsEl = document.getElementById('preview_sms');
     const smsCharEl = document.getElementById('sms_char_count');
-    if (smsEl) {
-        let sms = `${orgPrefix}Ministering Interview\n`;
-        sms += `${greeting}${sampleName}, schedule your interview: ${sampleLink}`;
-        if (customInstructions) {
-            sms += `\n${customInstructions}`;
-        }
+    if (smsEl && SMS_TEMPLATE) {
+        let sms = renderTemplate(SMS_TEMPLATE, {
+            org_name: orgPrefix,
+            greeting: greeting,
+            name: sampleName,
+            link: sampleLink,
+            instructions: instructionsPlain,
+            signature: signaturePlain
+        });
+        // Clean up extra whitespace
+        sms = sms.replace(/\n{3,}/g, '\n\n').trim();
         smsEl.textContent = sms;
 
         if (smsCharEl) {
@@ -932,10 +1002,28 @@ document.addEventListener('DOMContentLoaded', function() {
     updatePreview();
     toggleSMSProvider();
     updateSchedulePreview();
+
+    // Register tab event listeners BEFORE activating tabs from hash
+    const messagesTab = document.getElementById('messages-tab');
+    if (messagesTab) {
+        messagesTab.addEventListener('shown.bs.tab', function() {
+            updateMessagePreview();
+            updateCharCount();
+        });
+    }
+
+    // Now activate tab from hash (this may trigger shown.bs.tab)
     activateTabFromHash();
+
     // Initialize message preview and character count
     updateMessagePreview();
     updateCharCount();
+
+    // Fallback: ensure preview updates after a brief delay (handles edge cases)
+    setTimeout(function() {
+        updateMessagePreview();
+        updateCharCount();
+    }, 100);
 });
 
 // Update schedule preview when dropdown values change

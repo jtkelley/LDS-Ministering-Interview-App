@@ -16,6 +16,8 @@ class MemberListScreen extends StatefulWidget {
 }
 
 class _MemberListScreenState extends State<MemberListScreen> {
+  final _searchController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -25,6 +27,12 @@ class _MemberListScreenState extends State<MemberListScreen> {
       provider.loadDistricts();
       provider.loadMembers();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _logout() async {
@@ -225,6 +233,32 @@ class _MemberListScreenState extends State<MemberListScreen> {
           ),
           child: Column(
             children: [
+              // Search bar
+              TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by name...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: provider.searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _searchController.clear();
+                            provider.clearSearch();
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                ),
+                onChanged: provider.setSearchQuery,
+              ),
+              const SizedBox(height: 12),
+
               // District filter
               Row(
                 children: [
@@ -272,13 +306,16 @@ class _MemberListScreenState extends State<MemberListScreen> {
   Widget _buildSelectionBar() {
     return Consumer<MembersProvider>(
       builder: (context, provider, _) {
-        final selectedCount = provider.selectedMemberIds.length;
-        final totalCount = provider.members.length;
+        final filteredMembers = provider.filteredMembers;
+        final selectedInView = filteredMembers
+            .where((m) => provider.selectedMemberIds.contains(m.id))
+            .length;
+        final totalCount = filteredMembers.length;
 
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: selectedCount > 0 ? Colors.blue.shade50 : Colors.white,
+            color: selectedInView > 0 ? Colors.blue.shade50 : Colors.white,
             border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
           ),
           child: Row(
@@ -290,15 +327,15 @@ class _MemberListScreenState extends State<MemberListScreen> {
                 onChanged: (_) => provider.toggleSelectAll(),
               ),
               Text(
-                selectedCount > 0
-                    ? '$selectedCount of $totalCount selected'
+                selectedInView > 0
+                    ? '$selectedInView of $totalCount selected'
                     : '$totalCount members',
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
               const Spacer(),
 
-              // Bulk action buttons
-              if (selectedCount > 0) ...[
+              // Bulk action buttons (show if any members are selected across all views)
+              if (provider.selectedMemberIds.isNotEmpty) ...[
                 ElevatedButton.icon(
                   onPressed: _sendBulkSms,
                   icon: const Icon(Icons.sms, size: 18),
@@ -353,6 +390,8 @@ class _MemberListScreenState extends State<MemberListScreen> {
           );
         }
 
+        final filteredMembers = provider.filteredMembers;
+
         if (provider.members.isEmpty) {
           return Center(
             child: Column(
@@ -369,12 +408,29 @@ class _MemberListScreenState extends State<MemberListScreen> {
           );
         }
 
+        if (filteredMembers.isEmpty && provider.searchQuery.isNotEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.search_off, size: 48, color: Colors.grey.shade400),
+                const SizedBox(height: 16),
+                Text(
+                  'No members match "${provider.searchQuery}"',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          );
+        }
+
         return RefreshIndicator(
           onRefresh: () => provider.loadMembers(),
           child: ListView.builder(
-            itemCount: provider.members.length,
+            itemCount: filteredMembers.length,
             itemBuilder: (context, index) {
-              final member = provider.members[index];
+              final member = filteredMembers[index];
               return _MemberListTile(
                 member: member,
                 isSelected: provider.selectedMemberIds.contains(member.id),

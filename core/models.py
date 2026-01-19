@@ -289,7 +289,9 @@ DEFAULT_SMS = """{org_name}Ministering Interview
 
 {link}
 
-{instructions}"""
+{instructions}
+
+{signature}"""
 
 
 class MessageTemplates(db.Model):
@@ -353,13 +355,15 @@ class MessageTemplates(db.Model):
             return ""
         return f"{self.greeting_style} "
 
-    def format_signature(self):
-        """Format signature from name and title"""
+    def format_signature(self, for_html=True):
+        """Format signature from name and title - HTML with <br> for email, plain text for SMS"""
         parts = []
         if self.signature_name:
             parts.append(self.signature_name)
         if self.signature_title:
             parts.append(self.signature_title)
+        if for_html:
+            return "<br>".join(parts)
         return "\n".join(parts)
 
     def format_instructions(self, for_sms=False):
@@ -408,7 +412,8 @@ class MessageTemplates(db.Model):
             greeting=self.format_greeting(),
             name=name,
             link=link,
-            instructions=self.format_instructions(for_sms=True)
+            instructions=self.format_instructions(for_sms=True),
+            signature=self.format_signature(for_html=False)
         )
 
         # Clean up extra whitespace for SMS (allow one blank line, collapse multiple)

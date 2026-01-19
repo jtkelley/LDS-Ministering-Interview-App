@@ -19,6 +19,32 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import json
 import csv
+import re
+
+
+def normalize_phone(phone):
+    """
+    Normalize phone number to XXX-XXX-XXXX format.
+    Strips all non-digit characters and formats consistently.
+    Handles 10-digit and 11-digit (with country code) numbers.
+    """
+    if not phone:
+        return ""
+
+    # Extract only digits
+    digits = re.sub(r'\D', '', phone)
+
+    # Handle 11-digit numbers (1 + area code + number)
+    if len(digits) == 11 and digits.startswith('1'):
+        digits = digits[1:]  # Remove leading 1
+
+    # Format as XXX-XXX-XXXX if we have 10 digits
+    if len(digits) == 10:
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+
+    # Return original if we can't normalize (international, etc.)
+    return phone
+
 
 def find_existing_chromedriver():
     """Try to find an existing ChromeDriver installation."""
@@ -578,7 +604,8 @@ def login_to_lcr(driver, username, password, progress_callback=None, debug_mode=
                     companionship_id = companionship_counter
                     for minister in companionship.get("ministers", []):
                         name = minister.get("name", "")
-                        phone = minister.get("phone", "") if "phone" in minister else ""
+                        raw_phone = minister.get("phone", "") if "phone" in minister else ""
+                        phone = normalize_phone(raw_phone)
                         email = minister.get("email", "") if "email" in minister else ""
                         row = {
                             'district': district_name,
@@ -660,7 +687,7 @@ def login_to_lcr(driver, username, password, progress_callback=None, debug_mode=
                                     # Look for phone and email in popup
                                     try:
                                         phone_elem = driver.find_element(By.XPATH, "//a[contains(@href, 'tel:')]")
-                                        phone = phone_elem.get_attribute("href").replace("tel:", "")
+                                        phone = normalize_phone(phone_elem.get_attribute("href").replace("tel:", ""))
                                     except:
                                         pass
 
@@ -719,157 +746,190 @@ def login_to_lcr(driver, username, password, progress_callback=None, debug_mode=
             if progress_callback:
                 progress_callback("📍 Step 8: Augmenting with popup data from ministering brothers column...")
             try:
-                # Find the ministering table
-                table = WebDriverWait(driver, 15).until(
+                # Find ALL ministering tables on the page (one per district)
+                WebDriverWait(driver, 15).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
                 )
-                
+                all_tables = driver.find_elements(By.CSS_SELECTOR, "table")
+                print(f"🔍 [DEBUG] Found {len(all_tables)} tables on the page (one per district)")
+
+                if progress_callback:
+                    progress_callback(f"📊 Found {len(all_tables)} district tables to process")
+
                 total_links = 0
                 total_popups = 0
                 total_phone_found = 0
                 total_email_found = 0
 
-                # Get all rows from the table
-                rows = table.find_elements(By.TAG_NAME, "tr")
-                print(f"🔍 [DEBUG] Found {len(rows)} rows for popup extraction")
-                
-                for row_idx, row in enumerate(rows[1:], 1):  # Skip header row
-                    cells = row.find_elements(By.TAG_NAME, "td")
-                    print(f"🔍 [DEBUG] Row {row_idx}: has {len(cells)} cells")
-                    if len(cells) < 3:  # Need at least 3 columns (district, interviewer, ministering brothers)
-                        print(f"🔍 [DEBUG] Row {row_idx}: skipped - not enough cells")
-                        continue
-                    
-                    # Debug: print what's in each cell
-                    for cell_idx, cell in enumerate(cells[:5]):  # Print first 5 cells
-                        print(f"🔍 [DEBUG] Row {row_idx}, Cell {cell_idx}: '{cell.text[:50] if cell.text else '(empty)'}'")
-                    
-                    # Check column 1 (index 1, second column) for ministering brother links
-                    ministering_cell = cells[1]
-                    brother_links = ministering_cell.find_elements(By.TAG_NAME, "a")
-                    print(f"🔍 [DEBUG] Row {row_idx}, Cell 1: found {len(brother_links)} links")
-                    
-                    for link in brother_links:
-                        link_text = link.text.strip()
-                        if not link_text:
+                # Process each table (each district has its own table)
+                for table_idx, table in enumerate(all_tables):
+                    # Get all rows from this table
+                    rows = table.find_elements(By.TAG_NAME, "tr")
+                    print(f"🔍 [DEBUG] Table {table_idx + 1}: Found {len(rows)} rows for popup extraction")
+
+                    if progress_callback:
+                        progress_callback(f"📍 Processing table {table_idx + 1}/{len(all_tables)} ({len(rows)} rows)...")
+
+                    for row_idx, row in enumerate(rows[1:], 1):  # Skip header row
+                        cells = row.find_elements(By.TAG_NAME, "td")
+                        print(f"🔍 [DEBUG] Table {table_idx + 1}, Row {row_idx}: has {len(cells)} cells")
+                        if len(cells) < 3:  # Need at least 3 columns (district, interviewer, ministering brothers)
+                            print(f"🔍 [DEBUG] Table {table_idx + 1}, Row {row_idx}: skipped - not enough cells")
                             continue
-                        total_links += 1
-                        print(f"🔍 [DEBUG] Processing link {total_links}: {link_text}")
 
-                        # Try to open popup for this ministering brother
-                        try:
-                            driver.execute_script("arguments[0].scrollIntoView();", link)
-                            time.sleep(0.2)
+                        # Debug: print what's in each cell
+                        for cell_idx, cell in enumerate(cells[:5]):  # Print first 5 cells
+                            print(f"🔍 [DEBUG] Table {table_idx + 1}, Row {row_idx}, Cell {cell_idx}: '{cell.text[:50] if cell.text else '(empty)'}'")
+
+                        # Check column 1 (index 1, second column) for ministering brother links
+                        ministering_cell = cells[1]
+                        brother_links = ministering_cell.find_elements(By.TAG_NAME, "a")
+                        print(f"🔍 [DEBUG] Table {table_idx + 1}, Row {row_idx}, Cell 1: found {len(brother_links)} links")
+
+                        # Store link texts BEFORE iterating to avoid stale element references
+                        # After each popup open/close, DOM changes and old element refs become stale
+                        link_texts = [link.text.strip() for link in brother_links if link.text.strip()]
+
+                        for link_text in link_texts:
+                            total_links += 1
+                            print(f"🔍 [DEBUG] Processing link {total_links}: {link_text}")
+
+                            # Try to open popup for this ministering brother
                             try:
-                                link.click()
-                            except Exception:
-                                driver.execute_script("arguments[0].click();", link)
-                            time.sleep(1)
+                                # Re-find the tables and rows fresh each iteration to avoid stale references
+                                all_tables_fresh = driver.find_elements(By.CSS_SELECTOR, "table")
+                                current_table = all_tables_fresh[table_idx]
+                                rows = current_table.find_elements(By.TAG_NAME, "tr")
+                                current_row = rows[row_idx]
+                                current_cells = current_row.find_elements(By.TAG_NAME, "td")
+                                current_ministering_cell = current_cells[1]
 
-                            # Look for popup - try different selectors
-                            popup = None
-                            popup_selectors = [
-                                ("CLASS_NAME", "sc-cd0364fd-0"),
-                                ("CSS_SELECTOR", "[role='dialog']"),
-                                ("CSS_SELECTOR", "[role='tooltip']"),
-                                ("CSS_SELECTOR", "[aria-modal='true']"),
-                                ("CSS_SELECTOR", ".MuiPopover-root"),
-                                ("CSS_SELECTOR", ".MuiDialog-root"),
-                                ("CSS_SELECTOR", "[class*='popup']"),
-                                ("CSS_SELECTOR", "[class*='modal']"),
-                                ("CSS_SELECTOR", "[class*='Popover']"),
-                            ]
+                                # Find the specific link by matching text
+                                link = None
+                                for candidate in current_ministering_cell.find_elements(By.TAG_NAME, "a"):
+                                    if candidate.text.strip() == link_text:
+                                        link = candidate
+                                        break
 
-                            for selector_type, selector_value in popup_selectors:
-                                try:
-                                    if selector_type == "CLASS_NAME":
-                                        popup = driver.find_element(By.CLASS_NAME, selector_value)
-                                    else:
-                                        popup = driver.find_element(By.CSS_SELECTOR, selector_value)
-                                    print(f"🔍 [DEBUG] Popup found with {selector_type}='{selector_value}' for {link_text}")
-                                    break
-                                except Exception:
+                                if not link:
+                                    print(f"🔍 [DEBUG] Could not re-find link for {link_text}, skipping")
                                     continue
 
-                            if not popup:
-                                print(f"🔍 [DEBUG] No popup container found for {link_text}, searching whole page...")
-
-                            # Whether or not we found a popup container, try to find tel: and mailto: links
-                            # Search in popup if found, otherwise search entire page
-                            search_context = popup if popup else driver
-                            total_popups += 1
-                            phone = ""
-                            email = ""
-
-                            # Extract phone from tel: link
-                            try:
-                                phone_elem = search_context.find_element(By.XPATH, ".//a[contains(@href, 'tel:')]")
-                                phone = phone_elem.get_attribute("href").replace("tel:", "").strip()
-                                print(f"🔍 [DEBUG] Phone found for {link_text}: {phone}")
-                                if phone:
-                                    total_phone_found += 1
-                            except Exception:
-                                # Try searching whole page if popup search failed
-                                if popup:
-                                    try:
-                                        phone_elem = driver.find_element(By.XPATH, "//a[contains(@href, 'tel:')]")
-                                        phone = phone_elem.get_attribute("href").replace("tel:", "").strip()
-                                        print(f"🔍 [DEBUG] Phone found (page search) for {link_text}: {phone}")
-                                        if phone:
-                                            total_phone_found += 1
-                                    except Exception:
-                                        print(f"🔍 [DEBUG] No phone link found for {link_text}")
-                                else:
-                                    print(f"🔍 [DEBUG] No phone link found for {link_text}")
-
-                            # Extract email from mailto: link
-                            try:
-                                email_elem = search_context.find_element(By.XPATH, ".//a[contains(@href, 'mailto:')]")
-                                email = email_elem.get_attribute("href").replace("mailto:", "").strip()
-                                print(f"🔍 [DEBUG] Email found for {link_text}: {email}")
-                                if email:
-                                    total_email_found += 1
-                            except Exception:
-                                # Try searching whole page if popup search failed
-                                if popup:
-                                    try:
-                                        email_elem = driver.find_element(By.XPATH, "//a[contains(@href, 'mailto:')]")
-                                        email = email_elem.get_attribute("href").replace("mailto:", "").strip()
-                                        print(f"🔍 [DEBUG] Email found (page search) for {link_text}: {email}")
-                                        if email:
-                                            total_email_found += 1
-                                    except Exception:
-                                        print(f"🔍 [DEBUG] No email link found for {link_text}")
-                                else:
-                                    print(f"🔍 [DEBUG] No email link found for {link_text}")
-
-                            # Update matching row in results (OUTSIDE the except block)
-                            for row_data in results:
-                                if row_data['name'] == link_text:
-                                    if phone and not row_data['phone']:
-                                        row_data['phone'] = phone
-                                        print(f"🔍 [DEBUG] Updated phone for {link_text}")
-                                    if email and not row_data['email']:
-                                        row_data['email'] = email
-                                        print(f"🔍 [DEBUG] Updated email for {link_text}")
-                                    break
-
-                            # Close popup
-                            if popup:
+                                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", link)
+                                time.sleep(0.3)
                                 try:
-                                    close_btn = popup.find_element(By.XPATH, ".//button[contains(text(), 'Close') or @aria-label='Close']")
-                                    close_btn.click()
-                                    print(f"🔍 [DEBUG] Closed popup for {link_text}")
+                                    link.click()
                                 except Exception:
-                                    try:
-                                        driver.find_element(By.TAG_NAME, "body").send_keys("\ue00c")  # Escape key
-                                        print(f"🔍 [DEBUG] Closed popup with Escape for {link_text}")
-                                    except Exception:
-                                        print(f"🔍 [DEBUG] Could not close popup for {link_text}")
-                            time.sleep(0.5)
+                                    driver.execute_script("arguments[0].click();", link)
 
-                        except Exception as e:
-                            print(f"🔍 [DEBUG] Error processing popup for {link_text}: {e}")
+                                # Wait for popup to appear
+                                time.sleep(1.5)
+
+                                # Look for popup using WebDriverWait for visibility
+                                popup = None
+                                popup_selectors = [
+                                    ("CLASS_NAME", "sc-cd0364fd-0"),
+                                    ("CSS_SELECTOR", "[role='dialog']"),
+                                    ("CSS_SELECTOR", "[role='tooltip']"),
+                                    ("CSS_SELECTOR", "[aria-modal='true']"),
+                                    ("CSS_SELECTOR", ".MuiPopover-root"),
+                                    ("CSS_SELECTOR", ".MuiDialog-root"),
+                                    ("CSS_SELECTOR", "[class*='popup']"),
+                                    ("CSS_SELECTOR", "[class*='modal']"),
+                                    ("CSS_SELECTOR", "[class*='Popover']"),
+                                ]
+
+                                for selector_type, selector_value in popup_selectors:
+                                    try:
+                                        if selector_type == "CLASS_NAME":
+                                            popup = WebDriverWait(driver, 3).until(
+                                                EC.visibility_of_element_located((By.CLASS_NAME, selector_value))
+                                            )
+                                        else:
+                                            popup = WebDriverWait(driver, 3).until(
+                                                EC.visibility_of_element_located((By.CSS_SELECTOR, selector_value))
+                                            )
+                                        print(f"🔍 [DEBUG] Popup found with {selector_type}='{selector_value}' for {link_text}")
+                                        break
+                                    except Exception:
+                                        continue
+
+                                if not popup:
+                                    print(f"🔍 [DEBUG] No popup container found for {link_text}, skipping...")
+                                    continue  # Skip this person - don't search whole page (can match wrong person)
+
+                                total_popups += 1
+                                phone = ""
+                                email = ""
+
+                                # Wait a bit for popup content to fully load
+                                time.sleep(0.5)
+
+                                # Extract phone from tel: link - use WebDriverWait within popup
+                                try:
+                                    phone_elem = WebDriverWait(popup, 2).until(
+                                        EC.presence_of_element_located((By.XPATH, ".//a[contains(@href, 'tel:')]"))
+                                    )
+                                    raw_phone = phone_elem.get_attribute("href").replace("tel:", "").strip()
+                                    phone = normalize_phone(raw_phone)
+                                    print(f"🔍 [DEBUG] Phone found for {link_text}: {raw_phone} -> {phone}")
+                                    if phone:
+                                        total_phone_found += 1
+                                except Exception:
+                                    print(f"🔍 [DEBUG] No phone link found in popup for {link_text}")
+
+                                # Extract email from mailto: link - use WebDriverWait within popup
+                                try:
+                                    email_elem = WebDriverWait(popup, 2).until(
+                                        EC.presence_of_element_located((By.XPATH, ".//a[contains(@href, 'mailto:')]"))
+                                    )
+                                    email = email_elem.get_attribute("href").replace("mailto:", "").strip()
+                                    print(f"🔍 [DEBUG] Email found for {link_text}: {email}")
+                                    if email:
+                                        total_email_found += 1
+                                except Exception:
+                                    print(f"🔍 [DEBUG] No email link found in popup for {link_text}")
+
+                                # Update matching row in results (OUTSIDE the except block)
+                                for row_data in results:
+                                    if row_data['name'] == link_text:
+                                        if phone and not row_data['phone']:
+                                            row_data['phone'] = phone
+                                            print(f"🔍 [DEBUG] Updated phone for {link_text}")
+                                        if email and not row_data['email']:
+                                            row_data['email'] = email
+                                            print(f"🔍 [DEBUG] Updated email for {link_text}")
+                                        break
+
+                                # Close popup - try multiple methods
+                                try:
+                                    # First try clicking outside the popup to close it
+                                    driver.find_element(By.TAG_NAME, "body").click()
+                                    print(f"🔍 [DEBUG] Clicked body to close popup for {link_text}")
+                                except Exception:
+                                    pass
+
+                                try:
+                                    # Then try Escape key
+                                    from selenium.webdriver.common.keys import Keys
+                                    driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                                    print(f"🔍 [DEBUG] Sent Escape to close popup for {link_text}")
+                                except Exception:
+                                    pass
+
+                                try:
+                                    # Try finding and clicking close button
+                                    close_btn = popup.find_element(By.XPATH, ".//button[contains(text(), 'Close') or @aria-label='Close' or contains(@class, 'close')]")
+                                    close_btn.click()
+                                    print(f"🔍 [DEBUG] Clicked close button for {link_text}")
+                                except Exception:
+                                    pass
+
+                                # Wait for popup to close - increased delay for animations
+                                time.sleep(1.0)
+
+                            except Exception as e:
+                                print(f"🔍 [DEBUG] Error processing popup for {link_text}: {e}")
 
                 print(f"🔍 [DEBUG] Popup extraction summary:")
                 print(f"  - Total links processed: {total_links}")

@@ -694,7 +694,7 @@ def send_notifications(district_id):
                         recipients=[member.email]
                     )
                     msg.html = body
-                    msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
+                    msg.body = services.html_to_plain_text(body)
                     mail.send(msg)
                     sent_count += 1
                 except Exception as e:
@@ -740,7 +740,7 @@ def send_individual_notification(member_id):
             subject, body = services.format_email_notification(member, link, current_quarter, current_year)
             msg = Message(subject, sender=sender_email, recipients=[member.email])
             msg.html = body
-            msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
+            msg.body = services.html_to_plain_text(body)
             mail.send(msg)
             email_sent = True
 
@@ -845,7 +845,7 @@ def send_all_notifications():
                         subject, body = services.format_email_notification(member, link, current_quarter, current_year)
                         msg = Message(subject, sender=sender_email, recipients=[member.email])
                         msg.html = body
-                        msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
+                        msg.body = services.html_to_plain_text(body)
                         mail.send(msg)
                         sent_count += 1
                         print(f"✅ Email sent to {member.name} ({member.email})")

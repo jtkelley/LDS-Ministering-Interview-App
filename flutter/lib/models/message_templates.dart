@@ -79,10 +79,21 @@ Thank you,''',
     );
   }
 
+  /// Convert name from "Last, First" format to "First Last" format
+  /// Matches Python backend behavior in core/services.py:format_email_notification
+  static String formatDisplayName(String name) {
+    if (name.contains(', ')) {
+      final parts = name.split(', ');
+      return parts.reversed.join(' ');
+    }
+    return name;
+  }
+
   /// Format SMS message for a specific member
   String formatSms(String name, String link) {
+    final displayName = formatDisplayName(name);
     return smsTemplate
-        .replaceAll('{name}', name)
+        .replaceAll('{name}', displayName)
         .replaceAll('{link}', link);
   }
 
@@ -93,8 +104,9 @@ Thank you,''',
 
   /// Format email body for a specific member
   String formatEmailBody(String name, String link) {
+    final displayName = formatDisplayName(name);
     return emailBodyTemplate
-        .replaceAll('{name}', name)
+        .replaceAll('{name}', displayName)
         .replaceAll('{link}', link);
   }
 }

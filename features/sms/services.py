@@ -6,6 +6,7 @@ import re
 from flask import url_for, current_app
 from flask_mail import Message
 from datetime import datetime
+from core.services import html_to_plain_text
 
 # Global SMS client storage
 sms_config = {
@@ -257,7 +258,7 @@ def send_booking_reminders_with_sms():
                             recipients=[member.email]
                         )
                         msg.html = body
-                        msg.body = re.sub('<[^<]+?>', '', body)  # Plain text fallback
+                        msg.body = html_to_plain_text(body)
                         mail.send(msg)
                         email_sent += 1
                     except Exception as e:
