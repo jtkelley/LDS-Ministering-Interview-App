@@ -533,6 +533,9 @@ def get_message_templates():
     sms_rendered = re.sub(r'\n{3,}', '\n\n', sms_rendered).strip()
     email_body_rendered = re.sub(r'\n{3,}', '\n\n', email_body_rendered).strip()
 
+    # Create plain text version of email body for mailto: links (which don't support HTML)
+    email_body_plain = services.html_to_plain_text(email_body_rendered)
+
     return jsonify({
         'organization_name': msg_config.organization_name or '',
         'greeting_style': msg_config.greeting_style or 'Dear',
@@ -547,5 +550,6 @@ def get_message_templates():
         # Partially rendered templates - {name} and {link} remain as placeholders
         'sms_template': sms_rendered,
         'email_subject_template': email_subject_rendered,
-        'email_body_template': email_body_rendered
+        'email_body_template': email_body_rendered,
+        'email_body_template_plain': email_body_plain  # Plain text version for mailto: links
     })

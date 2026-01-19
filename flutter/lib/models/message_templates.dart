@@ -13,6 +13,7 @@ class MessageTemplates {
   final String smsTemplate;
   final String emailSubjectTemplate;
   final String emailBodyTemplate;
+  final String emailBodyTemplatePlain; // Plain text version for mailto: links
 
   MessageTemplates({
     required this.organizationName,
@@ -28,6 +29,7 @@ class MessageTemplates {
     required this.smsTemplate,
     required this.emailSubjectTemplate,
     required this.emailBodyTemplate,
+    required this.emailBodyTemplatePlain,
   });
 
   factory MessageTemplates.fromJson(Map<String, dynamic> json) {
@@ -45,6 +47,7 @@ class MessageTemplates {
       smsTemplate: json['sms_template'] ?? '',
       emailSubjectTemplate: json['email_subject_template'] ?? '',
       emailBodyTemplate: json['email_body_template'] ?? '',
+      emailBodyTemplatePlain: json['email_body_template_plain'] ?? json['email_body_template'] ?? '',
     );
   }
 
@@ -53,6 +56,16 @@ class MessageTemplates {
     final now = DateTime.now();
     final quarter = ((now.month - 1) ~/ 3) + 1;
     final year = now.year;
+
+    const defaultBody = '''Dear {name},
+
+Interview slots are now available for the current quarter (Q{quarter} {year}).
+
+Please click the link below to schedule your interview:
+
+{link}
+
+Thank you,''';
 
     return MessageTemplates(
       organizationName: '',
@@ -67,15 +80,8 @@ class MessageTemplates {
       year: year,
       smsTemplate: 'Ministering Interview\nDear {name}, schedule your interview: {link}',
       emailSubjectTemplate: 'Ministering Interview - Q$quarter $year',
-      emailBodyTemplate: '''Dear {name},
-
-Interview slots are now available for the current quarter (Q$quarter $year).
-
-Please click the link below to schedule your interview:
-
-{link}
-
-Thank you,''',
+      emailBodyTemplate: defaultBody.replaceAll('{quarter}', quarter.toString()).replaceAll('{year}', year.toString()),
+      emailBodyTemplatePlain: defaultBody.replaceAll('{quarter}', quarter.toString()).replaceAll('{year}', year.toString()),
     );
   }
 
@@ -102,10 +108,10 @@ Thank you,''',
     return emailSubjectTemplate;
   }
 
-  /// Format email body for a specific member
+  /// Format email body for a specific member (plain text for mailto: links)
   String formatEmailBody(String name, String link) {
     final displayName = formatDisplayName(name);
-    return emailBodyTemplate
+    return emailBodyTemplatePlain
         .replaceAll('{name}', displayName)
         .replaceAll('{link}', link);
   }
