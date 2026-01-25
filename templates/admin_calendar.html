@@ -65,13 +65,29 @@
         </div>
         {% endif %}
         
-        <div class="mb-4">
+        <div class="mb-4 d-flex align-items-center gap-3 flex-wrap">
             <form method="GET" class="d-inline">
                 <label for="district" class="form-label me-2">Filter by District:</label>
                 <select name="district" id="district" class="form-select d-inline w-auto" onchange="this.form.submit()">
                     <option value="">All Districts</option>
                     {% for district in all_districts %}
                     <option value="{{ district.id }}" {% if district.id == selected_district_id %}selected{% endif %}>{{ district.name }}</option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" name="period" value="{{ period }}">
+            </form>
+
+            <form method="GET" class="d-inline">
+                {% if selected_district_id %}
+                <input type="hidden" name="district" value="{{ selected_district_id }}">
+                {% endif %}
+                <label for="period" class="form-label me-2">Time Period:</label>
+                <select name="period" id="period" class="form-select d-inline w-auto" onchange="this.form.submit()">
+                    <option value="upcoming" {% if period == 'upcoming' %}selected{% endif %}>Upcoming</option>
+                    <option value="all" {% if period == 'all' %}selected{% endif %}>All Time</option>
+                    {% for year, quarter in available_quarters %}
+                    {% set q_value = 'q' ~ quarter ~ year %}
+                    <option value="{{ q_value }}" {% if period == q_value %}selected{% endif %}>Q{{ quarter }} {{ year }}</option>
                     {% endfor %}
                 </select>
             </form>
@@ -113,7 +129,7 @@
                                         {% if slot.bookings|length == 0 %}bg-success text-white
                                         {% elif slot.bookings|length < 10 %}bg-warning
                                         {% else %}bg-danger text-white{% endif %}">
-                                        <strong>{{ slot.start_time }} ({{ slot.duration }}min)</strong>
+                                        <strong>{{ slot.start_time.strftime('%I:%M %p') }} ({{ slot.duration }}min)</strong>
                                         {% if slot.bookings %}
                                             <ul class="list-unstyled mt-1 mb-1 small">
                                             {% for booking in slot.bookings %}
@@ -126,6 +142,8 @@
                                                         <span class="badge bg-secondary ms-2">{{ booking.interview_type|default('in-person')|title }}</span>
                                                     </span>
                                                     <form method="POST" action="{{ url_for('admin.remove_booking', booking_id=booking.id) }}" style="display:inline;">
+                                                        <input type="hidden" name="period" value="{{ period }}">
+                                                        <input type="hidden" name="district" value="{{ selected_district_id or '' }}">
                                                         <button type="submit" class="btn btn-sm btn-outline-danger btn-close" data-confirm-message="Remove {{ booking.member.name }}?" data-confirm-variant="danger" aria-label="Remove"></button>
                                                     </form>
                                                 </li>
@@ -136,6 +154,8 @@
                                             {% set booked_ids = slot.bookings|map(attribute='member_id')|list %}
                                             {% set allowed_companionship = slot.bookings[0].member.companionship if slot.bookings else None %}
                                             <form method="POST" action="{{ url_for('admin.add_booking', slot_id=slot.id) }}" class="mt-1">
+                                                <input type="hidden" name="period" value="{{ period }}">
+                                                <input type="hidden" name="district" value="{{ selected_district_id or '' }}">
                                                 <div class="d-flex gap-2 mb-1">
                                                     <select name="member_id" class="form-select form-select-sm select2" style="flex: 1;">
                                                         <option value="">Add member...</option>
@@ -168,7 +188,7 @@
                             </div>
                         {% endfor %}
                     {% else %}
-                        <p class="text-muted small">No upcoming slots.</p>
+                        <p class="text-muted small">{% if period == 'upcoming' %}No upcoming slots.{% else %}No slots found for this period.{% endif %}</p>
                     {% endif %}
                 </div>
             </div>

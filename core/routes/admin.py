@@ -43,14 +43,14 @@ def admin():
     # User is authenticated and is admin - proceed with rendering
     today = datetime.now().date()
     selected_district_id = request.args.get('district', type=int)
-    show_past = request.args.get('show_past', 'false').lower() == 'true'
-    
+    period = request.args.get('period', 'upcoming')  # 'upcoming', 'all', or 'qXYYYY' (e.g., 'q12026')
+
     # Calculate current quarter and previous quarter end date
     current_month = today.month
     current_quarter = ((current_month - 1) // 3) + 1
     previous_quarter = current_quarter - 1 if current_quarter > 1 else 4
     previous_year = today.year if previous_quarter < current_quarter else today.year - 1
-    
+
     # End dates for quarters
     quarter_end_dates = {
         1: datetime(previous_year, 3, 31).date(),
@@ -60,8 +60,48 @@ def admin():
     }
     previous_quarter_end = quarter_end_dates[previous_quarter]
     min_cleanup_date = previous_quarter_end + timedelta(days=1)  # Start from the day after previous quarter ends
-    
-    query = InterviewSlot.query.filter(InterviewSlot.date >= today) if not show_past else InterviewSlot.query
+
+    # Get all unique quarters that have slots (for the dropdown)
+    available_quarters = db.session.query(
+        extract('year', InterviewSlot.date).label('year'),
+        func.ceil(extract('month', InterviewSlot.date) / 3.0).label('quarter')
+    ).distinct().order_by(
+        extract('year', InterviewSlot.date).desc(),
+        func.ceil(extract('month', InterviewSlot.date) / 3.0).desc()
+    ).all()
+    # Convert to list of tuples (year, quarter) as integers
+    available_quarters = [(int(q.year), int(q.quarter)) for q in available_quarters]
+
+    # Build query based on period filter
+    if period == 'upcoming':
+        query = InterviewSlot.query.filter(InterviewSlot.date >= today)
+    elif period == 'all':
+        query = InterviewSlot.query
+    elif period.startswith('q') and len(period) == 6:
+        # Parse qXYYYY format (e.g., q12026 = Q1 2026)
+        try:
+            q_num = int(period[1])
+            q_year = int(period[2:])
+            # Calculate quarter date range
+            quarter_start_month = (q_num - 1) * 3 + 1
+            quarter_end_month = q_num * 3
+            quarter_start = datetime(q_year, quarter_start_month, 1).date()
+            if quarter_end_month == 12:
+                quarter_end = datetime(q_year, 12, 31).date()
+            else:
+                quarter_end = (datetime(q_year, quarter_end_month + 1, 1) - timedelta(days=1)).date()
+            query = InterviewSlot.query.filter(
+                InterviewSlot.date >= quarter_start,
+                InterviewSlot.date <= quarter_end
+            )
+        except (ValueError, IndexError):
+            # Invalid format, fall back to upcoming
+            period = 'upcoming'
+            query = InterviewSlot.query.filter(InterviewSlot.date >= today)
+    else:
+        # Invalid period, fall back to upcoming
+        period = 'upcoming'
+        query = InterviewSlot.query.filter(InterviewSlot.date >= today)
     
     if selected_district_id:
         districts = District.query.filter_by(id=selected_district_id).all()
@@ -79,7 +119,7 @@ def admin():
     all_districts = District.query.all()
     has_districts = len(all_districts) > 0
     has_slots = InterviewSlot.query.first() is not None
-    return render_template('admin_calendar.html', districts=districts, district_slots=district_slots, all_districts=all_districts, selected_district_id=selected_district_id, show_past=show_past, min_cleanup_date=min_cleanup_date, has_districts=has_districts, has_slots=has_slots)
+    return render_template('admin_calendar.html', districts=districts, district_slots=district_slots, all_districts=all_districts, selected_district_id=selected_district_id, period=period, available_quarters=available_quarters, min_cleanup_date=min_cleanup_date, has_districts=has_districts, has_slots=has_slots)
 
 @admin_bp.route('/delete_old_slots', methods=['POST'])
 @admin_required
@@ -927,10 +967,17 @@ def add_booking(slot_id):
     slot = InterviewSlot.query.get_or_404(slot_id)
     member_id = request.form.get('member_id')
 
+    # Get filter state to preserve after redirect
+    period = request.form.get('period', 'upcoming')
+    district = request.form.get('district', '')
+    redirect_params = {'period': period}
+    if district:
+        redirect_params['district'] = district
+
     # Validate member_id
     if not member_id or member_id == '':
         flash('Please select a member to book.', 'warning')
-        return redirect(url_for('admin.admin'))
+        return redirect(url_for('admin.admin', **redirect_params))
 
     interview_type = request.form.get('interview_type', 'in-person')
     member = Member.query.get_or_404(int(member_id))
@@ -945,7 +992,7 @@ def add_booking(slot_id):
             existing_companionship = slot.bookings[0].member.companionship
             if member.companionship != existing_companionship:
                 flash('This slot is reserved for another companionship.')
-                return redirect(url_for('admin.admin'))
+                return redirect(url_for('admin.admin', **redirect_params))
 
         if len(slot.bookings) < slot.max_slots:
             booking = Booking(slot_id=slot_id, member_id=member_id, interview_type=interview_type)
@@ -955,7 +1002,7 @@ def add_booking(slot_id):
         else:
             flash('Slot is full.')
 
-    return redirect(url_for('admin.admin'))
+    return redirect(url_for('admin.admin', **redirect_params))
 
 @admin_bp.route('/remove_booking/<int:booking_id>', methods=['POST'])
 @admin_required
@@ -966,7 +1013,14 @@ def remove_booking(booking_id):
     db.session.delete(booking)
     db.session.commit()
     flash(f'Removed {member_name} from the slot.')
-    return redirect(url_for('admin.admin'))
+
+    # Preserve filter state after redirect
+    period = request.form.get('period', 'upcoming')
+    district = request.form.get('district', '')
+    redirect_params = {'period': period}
+    if district:
+        redirect_params['district'] = district
+    return redirect(url_for('admin.admin', **redirect_params))
 
 @admin_bp.route('/delete_slot/<int:slot_id>', methods=['POST'])
 @admin_required
@@ -1594,6 +1648,7 @@ def save_message_settings():
 
         msg_config.organization_name = request.form.get('organization_name', '').strip() or None
         msg_config.greeting_style = request.form.get('greeting_style', 'Dear')
+        msg_config.custom_message = request.form.get('custom_message', '').strip() or None
         msg_config.custom_instructions = request.form.get('custom_instructions', '').strip() or None
         msg_config.signature_name = request.form.get('signature_name', '').strip() or None
         msg_config.signature_title = request.form.get('signature_title', '').strip() or None

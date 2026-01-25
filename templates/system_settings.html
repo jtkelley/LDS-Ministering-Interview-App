@@ -684,6 +684,19 @@
                                         </select>
                                     </div>
 
+                                    <!-- Custom Message -->
+                                    <div class="mb-3">
+                                        <label for="custom_message" class="form-label">Custom Message (optional)</label>
+                                        <textarea class="form-control" id="custom_message" name="custom_message"
+                                                  rows="2" maxlength="500"
+                                                  placeholder="e.g., We're looking forward to meeting with you this quarter!"
+                                                  onkeyup="updateMessagePreview(); updateCustomMessageCharCount()">{{ msg_config.custom_message or '' }}</textarea>
+                                        <small class="form-text text-muted">
+                                            <span id="custom_message_char_count">0</span>/500 characters.
+                                            Appears after greeting in emails and SMS only (not on booking page).
+                                        </small>
+                                    </div>
+
                                     <!-- Custom Instructions -->
                                     <div class="mb-3">
                                         <label for="custom_instructions" class="form-label">Custom Instructions (optional)</label>
@@ -742,7 +755,9 @@
                                             </div>
                                             <hr>
                                             <pre id="preview_body" style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{ greeting }}{{ sample_name }},
-
+{% if msg_config.custom_message %}
+{{ msg_config.custom_message }}
+{% endif %}
 Interview slots are now available for the current quarter ({{ quarter }} {{ year }}).
 
 Please click the link below to schedule your interview:
@@ -762,8 +777,11 @@ Please click the link below to schedule your interview:
                                         </div>
                                         <div class="card-body" style="font-family: monospace; font-size: 13px;">
                                             <pre id="preview_sms" style="white-space: pre-wrap; margin: 0; font-family: inherit;">{{ org_prefix }}Ministering Interview
-{{ greeting }}{{ sample_name }}, schedule your interview: {{ sample_link }}{% if msg_config.custom_instructions %}
+{{ greeting }}{{ sample_name }}, schedule your interview.{% if msg_config.custom_message %}
+{{ msg_config.custom_message }}{% endif %}
 
+{{ sample_link }}
+{% if msg_config.custom_instructions %}
 {{ msg_config.custom_instructions }}{% endif %}{% if signature %}
 
 {{ signature }}{% endif %}</pre>
@@ -891,9 +909,18 @@ function updateCharCount() {
     }
 }
 
+function updateCustomMessageCharCount() {
+    const textarea = document.getElementById('custom_message');
+    const charCount = document.getElementById('custom_message_char_count');
+    if (textarea && charCount) {
+        charCount.textContent = textarea.value.length;
+    }
+}
+
 function updateMessagePreview() {
     const orgName = document.getElementById('organization_name')?.value || '';
     const greetingStyle = document.getElementById('greeting_style')?.value || 'Dear';
+    const customMessage = document.getElementById('custom_message')?.value || '';
     const customInstructions = document.getElementById('custom_instructions')?.value || '';
     const signatureName = document.getElementById('signature_name')?.value || '';
     const signatureTitle = document.getElementById('signature_title')?.value || '';
@@ -906,6 +933,10 @@ function updateMessagePreview() {
     // Format values for template substitution
     const orgPrefix = orgName ? orgName + ' - ' : '';
     const greeting = (greetingStyle && greetingStyle !== 'None') ? greetingStyle + ' ' : '';
+
+    // Format custom message (HTML for email, plain for SMS)
+    const customMessageHtml = customMessage ? `<p>${customMessage}</p>` : '';
+    const customMessagePlain = customMessage || '';
 
     // Format instructions (HTML for email, plain for SMS)
     const instructionsHtml = customInstructions ? `<p>${customInstructions}</p>` : '';
@@ -967,6 +998,7 @@ function updateMessagePreview() {
             quarter: quarter,
             year: year,
             link: sampleLink,
+            custom_message: customMessageHtml,
             instructions: instructionsHtml,
             signature: signatureHtml
         });
@@ -982,6 +1014,7 @@ function updateMessagePreview() {
             greeting: greeting,
             name: sampleName,
             link: sampleLink,
+            custom_message: customMessagePlain,
             instructions: instructionsPlain,
             signature: signaturePlain
         });
@@ -1009,6 +1042,7 @@ document.addEventListener('DOMContentLoaded', function() {
         messagesTab.addEventListener('shown.bs.tab', function() {
             updateMessagePreview();
             updateCharCount();
+            updateCustomMessageCharCount();
         });
     }
 
@@ -1018,11 +1052,13 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize message preview and character count
     updateMessagePreview();
     updateCharCount();
+    updateCustomMessageCharCount();
 
     // Fallback: ensure preview updates after a brief delay (handles edge cases)
     setTimeout(function() {
         updateMessagePreview();
         updateCharCount();
+        updateCustomMessageCharCount();
     }, 100);
 });
 

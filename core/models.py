@@ -279,13 +279,15 @@ class NotificationLog(db.Model):
 # Default message templates
 DEFAULT_EMAIL_SUBJECT = "{org_name}Ministering Interview - Q{quarter} {year}"
 DEFAULT_EMAIL_BODY = """<p>{greeting}{name},</p>
+{custom_message}
 <p>Interview slots are now available for the current quarter (Q{quarter} {year}).</p>
 <p><a href="{link}">Click here to schedule your interview</a></p>
 {instructions}
 <p>Thank you,<br>{signature}</p>"""
 
 DEFAULT_SMS = """{org_name}Ministering Interview
-{greeting}{name}, schedule your interview:
+{greeting}{name}, schedule your interview.
+{custom_message}
 
 {link}
 
@@ -302,7 +304,8 @@ class MessageTemplates(db.Model):
     # Simple settings (exposed in UI)
     organization_name = db.Column(db.String(100))
     greeting_style = db.Column(db.String(20), default='Dear')
-    custom_instructions = db.Column(db.String(500))
+    custom_message = db.Column(db.String(500))  # Appears after greeting in messages (not on booking page)
+    custom_instructions = db.Column(db.String(500))  # Appears on booking page and in messages
     signature_name = db.Column(db.String(100))
     signature_title = db.Column(db.String(100))
 
@@ -315,8 +318,26 @@ class MessageTemplates(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
 
     @staticmethod
+    def _ensure_columns_exist():
+        """Ensure all columns exist in the table (auto-migration for new columns)."""
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        existing_columns = [col['name'] for col in inspector.get_columns('message_templates')]
+
+        # Add custom_message column if missing
+        if 'custom_message' not in existing_columns:
+            db.session.execute(text('ALTER TABLE message_templates ADD COLUMN custom_message VARCHAR(500)'))
+            db.session.commit()
+
+    @staticmethod
     def get_or_create():
         """Get existing settings or create with defaults. Also backfills missing templates."""
+        # Ensure new columns exist before querying
+        try:
+            MessageTemplates._ensure_columns_exist()
+        except Exception:
+            pass  # Table might not exist yet, will be created below
+
         settings = MessageTemplates.query.first()
         if not settings:
             settings = MessageTemplates(
@@ -339,6 +360,26 @@ class MessageTemplates(db.Model):
             if not settings.sms_template:
                 settings.sms_template = DEFAULT_SMS
                 updated = True
+
+            # Backfill {custom_message} placeholder if missing from existing templates
+            if settings.email_body_template and '{custom_message}' not in settings.email_body_template:
+                # Insert after first </p> (greeting line)
+                settings.email_body_template = settings.email_body_template.replace(
+                    '</p>', '</p>\n{custom_message}', 1
+                )
+                updated = True
+            if settings.sms_template and '{custom_message}' not in settings.sms_template:
+                # Insert after the greeting line
+                if '{name},' in settings.sms_template:
+                    settings.sms_template = settings.sms_template.replace(
+                        '{name},', '{name},\n{custom_message}', 1
+                    )
+                else:
+                    settings.sms_template = settings.sms_template.replace(
+                        '{name}', '{name}\n{custom_message}', 1
+                    )
+                updated = True
+
             if updated:
                 db.session.commit()
         return settings
@@ -354,6 +395,14 @@ class MessageTemplates(db.Model):
         if not self.greeting_style or self.greeting_style == 'None':
             return ""
         return f"{self.greeting_style} "
+
+    def format_custom_message(self, for_sms=False):
+        """Format custom message - HTML wrapped for email, plain for SMS"""
+        if not self.custom_message:
+            return ""
+        if for_sms:
+            return self.custom_message
+        return f"<p>{self.custom_message}</p>"
 
     def format_signature(self, for_html=True):
         """Format signature from name and title - HTML with <br> for email, plain text for SMS"""
@@ -394,6 +443,7 @@ class MessageTemplates(db.Model):
             quarter=quarter,
             year=year,
             link=link,
+            custom_message=self.format_custom_message(),
             instructions=self.format_instructions(),
             signature=self.format_signature()
         )
@@ -412,6 +462,7 @@ class MessageTemplates(db.Model):
             greeting=self.format_greeting(),
             name=name,
             link=link,
+            custom_message=self.format_custom_message(for_sms=True),
             instructions=self.format_instructions(for_sms=True),
             signature=self.format_signature(for_html=False)
         )
