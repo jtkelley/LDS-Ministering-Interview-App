@@ -75,6 +75,8 @@
                 <th>District</th>
                 <th>Companionship</th>
                 <th>Status</th>
+                <th class="text-center">No SMS</th>
+                <th class="text-center">Opted Out</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -96,6 +98,18 @@
                         <br><small class="text-muted">{{ member.bookings|length }} booking(s)</small>
                         {% endif %}
                     {% endif %}
+                </td>
+                <td class="text-center">
+                    <form method="POST" action="{{ url_for('admin.toggle_member_no_sms', member_id=member.id) }}" style="display:inline;">
+                        <input type="checkbox" class="form-check-input" {% if member.no_sms %}checked{% endif %}
+                               onchange="this.form.submit()" title="{% if member.no_sms %}SMS disabled{% else %}SMS enabled{% endif %}">
+                    </form>
+                </td>
+                <td class="text-center">
+                    <form method="POST" action="{{ url_for('admin.toggle_member_opted_out', member_id=member.id) }}" style="display:inline;">
+                        <input type="checkbox" class="form-check-input" {% if member.opted_out %}checked{% endif %}
+                               onchange="this.form.submit()" title="{% if member.opted_out %}Opted out of all invitations{% else %}Receiving invitations{% endif %}">
+                    </form>
                 </td>
                 <td>
                     <div class="d-flex flex-wrap gap-1">

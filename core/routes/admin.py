@@ -609,43 +609,56 @@ def manage_slots(id):
             if start_date >= end_date:
                 flash('Start date must be before end date.')
                 return redirect(url_for('admin.manage_slots', id=id))
-            
-            # Generate slots for each occurrence of day_of_week between start_date and end_date
-            current_date = start_date
+
+            # Determine target districts
+            apply_all = request.form.get('apply_all') == '1'
+            skip_first_sunday = request.form.get('skip_first_sunday') == '1'
+            target_districts = District.query.all() if apply_all else [district]
+
+            # Generate slots for each target district
             slots_created = 0
             skipped_slots = []
-            while current_date <= end_date:
-                if current_date.weekday() == day_of_week:
-                    # Get existing slots for this date and district
-                    existing_slots = InterviewSlot.query.filter_by(district_id=id, date=current_date).all()
-                    for j in range(num_slots):
-                        slot_time = (datetime.combine(current_date, start_time) + timedelta(minutes=duration * j)).time()
-                        slot_end_time = (datetime.combine(current_date, slot_time) + timedelta(minutes=duration)).time()
-                        
-                        # Check for overlap with existing slots
-                        overlap = False
-                        for existing in existing_slots:
-                            if (slot_time < existing.start_time + timedelta(minutes=existing.duration) and
-                                slot_end_time > existing.start_time):
-                                overlap = True
-                                break
-                        
-                        if overlap:
-                            skipped_slots.append(f"{current_date} at {slot_time}")
-                        else:
-                            slot = InterviewSlot(
-                                district_id=id,
-                                date=current_date,
-                                start_time=slot_time,
-                                duration=duration,
-                                max_slots=10  # Max 10 members per slot (companionship-based)
-                            )
-                            db.session.add(slot)
-                            slots_created += 1
-                current_date += timedelta(days=1)
-            
+            for target_district in target_districts:
+                current_date = start_date
+                while current_date <= end_date:
+                    if current_date.weekday() == day_of_week:
+                        # Skip first Sunday of the month if requested
+                        if skip_first_sunday and current_date.weekday() == 6 and current_date.day <= 7:
+                            current_date += timedelta(days=1)
+                            continue
+                        # Get existing slots for this date and district
+                        existing_slots = InterviewSlot.query.filter_by(district_id=target_district.id, date=current_date).all()
+                        for j in range(num_slots):
+                            slot_time = (datetime.combine(current_date, start_time) + timedelta(minutes=duration * j)).time()
+                            slot_end_time = (datetime.combine(current_date, slot_time) + timedelta(minutes=duration)).time()
+
+                            # Check for overlap with existing slots
+                            overlap = False
+                            for existing in existing_slots:
+                                existing_end = (datetime.combine(current_date, existing.start_time) + timedelta(minutes=existing.duration)).time()
+                                if (slot_time < existing_end and slot_end_time > existing.start_time):
+                                    overlap = True
+                                    break
+
+                            if overlap:
+                                skipped_slots.append(f"{target_district.name}: {current_date} at {slot_time}")
+                            else:
+                                slot = InterviewSlot(
+                                    district_id=target_district.id,
+                                    date=current_date,
+                                    start_time=slot_time,
+                                    duration=duration,
+                                    max_slots=10  # Max 10 members per slot (companionship-based)
+                                )
+                                db.session.add(slot)
+                                slots_created += 1
+                    current_date += timedelta(days=1)
+
             db.session.commit()
-            flash(f'Generated {slots_created} recurring slots!')
+            if apply_all:
+                flash(f'Generated {slots_created} recurring slots across {len(target_districts)} districts!')
+            else:
+                flash(f'Generated {slots_created} recurring slots!')
             if skipped_slots:
                 combined_msg = "The following slots were skipped due to conflicts:<br>" + "<br>".join(skipped_slots)
                 flash(combined_msg, 'warning')
@@ -684,19 +697,32 @@ def manage_slots(id):
 def send_notifications(district_id):
     district = District.query.get_or_404(district_id)
 
-    # Get current quarter
+    # Get current and next quarter
     today = datetime.now().date()
     current_quarter = ((today.month - 1) // 3) + 1
     current_year = today.year
+    next_quarter = current_quarter + 1 if current_quarter < 4 else 1
+    next_year = current_year if current_quarter < 4 else current_year + 1
 
-    # Check if there are any available slots for this district in current quarter
+    # Get target quarter from URL params (default to current)
+    target_quarter = request.args.get('q', type=int, default=current_quarter)
+    target_year = request.args.get('y', type=int, default=current_year)
+
+    # Validate: only allow current or next quarter
+    valid_quarters = [(current_quarter, current_year), (next_quarter, next_year)]
+    if (target_quarter, target_year) not in valid_quarters:
+        target_quarter = current_quarter
+        target_year = current_year
+
+    # Check if there are any available slots for this district in target quarter
     available_slots = InterviewSlot.query.filter_by(district_id=district_id).filter(
         InterviewSlot.date >= today,
-        InterviewSlot.quarter == current_quarter
+        InterviewSlot.quarter == target_quarter,
+        func.extract('year', InterviewSlot.date) == target_year
     ).all()
 
     if not available_slots:
-        flash('No interview slots available for the current quarter. Please create slots before sending notifications.', 'warning')
+        flash(f'No interview slots available for Q{target_quarter} {target_year}. Please create slots before sending notifications.', 'warning')
         return redirect(url_for('admin.district_detail', id=district_id))
 
     # Load email config
@@ -716,18 +742,23 @@ def send_notifications(district_id):
                 skipped_count += 1
                 continue
 
-            # Skip if member already has a booking for current quarter
-            if member.has_booking_for_quarter(current_quarter, current_year):
+            # Skip opted-out members
+            if member.opted_out:
                 skipped_count += 1
                 continue
 
-            link = url_for('public.schedule', token=member.token, _external=True)
+            # Skip if member already has a booking for target quarter
+            if member.has_booking_for_quarter(target_quarter, target_year):
+                skipped_count += 1
+                continue
+
+            link = url_for('public.schedule', token=member.token, q=target_quarter, y=target_year, _external=True)
 
             # Send email
             if member.email:
                 try:
                     # Use message templates for formatting
-                    subject, body = services.format_email_notification(member, link, current_quarter, current_year)
+                    subject, body = services.format_email_notification(member, link, target_quarter, target_year)
                     msg = Message(
                         subject,
                         sender=sender_email,
@@ -744,7 +775,7 @@ def send_notifications(district_id):
     # Commit all notification logs
     db.session.commit()
 
-    message = f'Notifications sent to {sent_count} members.'
+    message = f'Notifications for Q{target_quarter} {target_year} sent to {sent_count} members.'
     if skipped_count > 0:
         message += f' Skipped {skipped_count} members who already have bookings.'
     flash(message, 'success')
@@ -757,10 +788,26 @@ def send_individual_notification(member_id):
     """Send notification to a specific member"""
     member = Member.query.get_or_404(member_id)
 
-    # Get current quarter
+    # Get current and next quarter
     today = datetime.now().date()
     current_quarter = ((today.month - 1) // 3) + 1
     current_year = today.year
+    next_quarter = current_quarter + 1 if current_quarter < 4 else 1
+    next_year = current_year if current_quarter < 4 else current_year + 1
+
+    # Get target quarter from form or URL params (default to current)
+    target_quarter = request.form.get('q', type=int) or request.args.get('q', type=int, default=current_quarter)
+    target_year = request.form.get('y', type=int) or request.args.get('y', type=int, default=current_year)
+
+    # Validate: only allow current or next quarter
+    valid_quarters = [(current_quarter, current_year), (next_quarter, next_year)]
+    if (target_quarter, target_year) not in valid_quarters:
+        target_quarter = current_quarter
+        target_year = current_year
+
+    # Check if member has opted out
+    if member.opted_out:
+        return {'success': False, 'error': 'Member has opted out of invitations'}, 400
 
     # Load email config
     sender_email = services.apply_email_config()
@@ -771,13 +818,13 @@ def send_individual_notification(member_id):
     email_sent = False
     errors = []
 
-    link = url_for('public.schedule', token=member.token, _external=True)
+    link = url_for('public.schedule', token=member.token, q=target_quarter, y=target_year, _external=True)
 
     # Send email
     if member.email:
         try:
             # Use message templates for formatting
-            subject, body = services.format_email_notification(member, link, current_quarter, current_year)
+            subject, body = services.format_email_notification(member, link, target_quarter, target_year)
             msg = Message(subject, sender=sender_email, recipients=[member.email])
             msg.html = body
             msg.body = services.html_to_plain_text(body)
@@ -788,8 +835,8 @@ def send_individual_notification(member_id):
             log = NotificationLog(
                 member_id=member.id,
                 method='email',
-                quarter=current_quarter,
-                year=current_year,
+                quarter=target_quarter,
+                year=target_year,
                 success=True
             )
             db.session.add(log)
@@ -803,8 +850,8 @@ def send_individual_notification(member_id):
                 log = NotificationLog(
                     member_id=member.id,
                     method='email',
-                    quarter=current_quarter,
-                    year=current_year,
+                    quarter=target_quarter,
+                    year=target_year,
                     success=False,
                     error_message=error_msg
                 )
@@ -868,6 +915,11 @@ def send_all_notifications():
             for member in companionship.members:
                 # Skip inactive members
                 if not member.is_active:
+                    skipped_count += 1
+                    continue
+
+                # Skip opted-out members
+                if member.opted_out:
                     skipped_count += 1
                     continue
 
@@ -1249,6 +1301,7 @@ def edit_member(member_id):
         member.phone = request.form.get('phone')
         member.email = request.form.get('email')
         member.no_sms = 'no_sms' in request.form
+        member.opted_out = 'opted_out' in request.form
         member.is_active = 'is_active' in request.form
         db.session.commit()
         flash('Member updated successfully!', 'success')
@@ -1272,6 +1325,32 @@ def toggle_member_active(member_id):
 
     status = "reactivated" if member.is_active else "deactivated"
     flash(f'{member.name} has been {status}.', 'success')
+    return redirect(url_for('admin.manage_members'))
+
+
+@admin_bp.route('/member/<int:member_id>/toggle-opted-out', methods=['POST'])
+@admin_required
+def toggle_member_opted_out(member_id):
+    """Toggle a member's opted_out status"""
+    member = Member.query.get_or_404(member_id)
+    member.opted_out = not member.opted_out
+    db.session.commit()
+
+    status = "opted out" if member.opted_out else "opted back in"
+    flash(f'{member.name} has been {status}.', 'success')
+    return redirect(url_for('admin.manage_members'))
+
+
+@admin_bp.route('/member/<int:member_id>/toggle-no-sms', methods=['POST'])
+@admin_required
+def toggle_member_no_sms(member_id):
+    """Toggle a member's no_sms status"""
+    member = Member.query.get_or_404(member_id)
+    member.no_sms = not member.no_sms
+    db.session.commit()
+
+    status = "disabled" if member.no_sms else "enabled"
+    flash(f'SMS {status} for {member.name}.', 'success')
     return redirect(url_for('admin.manage_members'))
 
 

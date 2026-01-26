@@ -25,6 +25,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<MembersProvider>();
       provider.loadDistricts();
+      provider.loadAvailableQuarters();
       provider.loadMembers();
     });
   }
@@ -191,7 +192,7 @@ class _MemberListScreenState extends State<MemberListScreen> {
       appBar: AppBar(
         title: Consumer<MembersProvider>(
           builder: (context, provider, _) {
-            return Text('Q${provider.currentQuarter} ${provider.currentYear} Invitations');
+            return Text('Q${provider.targetQuarter} ${provider.targetYear} Invitations');
           },
         ),
         actions: [
@@ -286,14 +287,75 @@ class _MemberListScreenState extends State<MemberListScreen> {
               ),
               const SizedBox(height: 8),
 
-              // Needs invite toggle
+              // Quarter selector - only show after quarter data is loaded
+              if ((provider.currentQuarterHasSlots || provider.nextQuarterHasSlots) &&
+                  ((provider.currentQuarterHasSlots && provider.targetQuarter == provider.currentQuarter && provider.targetYear == provider.currentYear) ||
+                   (provider.nextQuarterHasSlots && provider.targetQuarter == provider.nextQuarter && provider.targetYear == provider.nextYear)))
+                Row(
+                  children: [
+                    const Text('Quarter: '),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButton<String>(
+                        value: '${provider.targetQuarter}_${provider.targetYear}',
+                        isExpanded: true,
+                        items: [
+                          if (provider.currentQuarterHasSlots)
+                            DropdownMenuItem<String>(
+                              value: '${provider.currentQuarter}_${provider.currentYear}',
+                              child: Text('Q${provider.currentQuarter} ${provider.currentYear} (Current)'),
+                            ),
+                          if (provider.nextQuarterHasSlots)
+                            DropdownMenuItem<String>(
+                              value: '${provider.nextQuarter}_${provider.nextYear}',
+                              child: Text('Q${provider.nextQuarter} ${provider.nextYear} (Next)'),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            final parts = value.split('_');
+                            provider.setTargetQuarter(int.parse(parts[0]), int.parse(parts[1]));
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              if ((provider.currentQuarterHasSlots || provider.nextQuarterHasSlots) &&
+                  ((provider.currentQuarterHasSlots && provider.targetQuarter == provider.currentQuarter && provider.targetYear == provider.currentYear) ||
+                   (provider.nextQuarterHasSlots && provider.targetQuarter == provider.nextQuarter && provider.targetYear == provider.nextYear)))
+                const SizedBox(height: 8),
+
+              // Booking filter
               Row(
                 children: [
-                  Switch(
-                    value: provider.filterNeedsInviteOnly,
-                    onChanged: provider.setNeedsInviteFilter,
+                  const Text('Show: '),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButton<String>(
+                      value: provider.bookingFilter,
+                      isExpanded: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'all',
+                          child: Text('All Members'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'not_booked',
+                          child: Text('Not Booked'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'companionship_not_booked',
+                          child: Text('Companionship Not Booked'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value != null) {
+                          provider.setBookingFilter(value);
+                        }
+                      },
+                    ),
                   ),
-                  const Text('Show only members who need invitations'),
                 ],
               ),
             ],
@@ -473,11 +535,14 @@ class _MemberListTile extends StatelessWidget {
     return ListTile(
       leading: Checkbox(
         value: isSelected,
-        onChanged: (_) => onToggle(),
+        onChanged: member.optedOut ? null : (_) => onToggle(),
       ),
       title: Text(
         member.name,
-        style: const TextStyle(fontWeight: FontWeight.w500),
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: member.optedOut ? Colors.grey : null,
+        ),
       ),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,22 +552,30 @@ class _MemberListTile extends StatelessWidget {
               member.district!.name,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
             ),
-          Row(
-            children: [
-              if (member.canReceiveEmail)
-                Icon(Icons.email, size: 14, color: Colors.grey.shade500),
-              if (member.canReceiveEmail) const SizedBox(width: 4),
-              if (member.canReceiveSms)
-                Icon(Icons.sms, size: 14, color: Colors.grey.shade500),
-              if (member.lastNotification != null) ...[
-                const SizedBox(width: 8),
-                Text(
-                  'Last: ${dateFormat.format(member.lastNotification!)}',
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                ),
+          if (member.optedOut)
+            Text(
+              'Opted out of invitations',
+              style: TextStyle(color: Colors.orange.shade700, fontSize: 12),
+            )
+          else
+            Row(
+              children: [
+                if (member.canReceiveEmail)
+                  Icon(Icons.email, size: 14, color: Colors.grey.shade500),
+                if (member.canReceiveEmail) const SizedBox(width: 4),
+                if (member.noSms && member.phone != null && member.phone!.isNotEmpty)
+                  Icon(Icons.sms_failed, size: 14, color: Colors.red.shade400)
+                else if (member.canReceiveSms)
+                  Icon(Icons.sms, size: 14, color: Colors.grey.shade500),
+                if (member.lastNotification != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    'Last: ${dateFormat.format(member.lastNotification!)}',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
         ],
       ),
       trailing: const Icon(Icons.chevron_right),

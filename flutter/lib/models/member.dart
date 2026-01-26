@@ -29,6 +29,7 @@ class Member {
   final String? email;
   final String? phone;
   final bool noSms;
+  final bool optedOut;
   final bool hasBooking;
   final District? district;
   final int? companionshipId;
@@ -43,6 +44,7 @@ class Member {
     this.email,
     this.phone,
     this.noSms = false,
+    this.optedOut = false,
     this.hasBooking = false,
     this.district,
     this.companionshipId,
@@ -60,6 +62,7 @@ class Member {
       email: json['email'],
       phone: json['phone'],
       noSms: json['no_sms'] ?? false,
+      optedOut: json['opted_out'] ?? false,
       hasBooking: json['has_booking'] ?? false,
       district: json['district'] != null ? District.fromJson(json['district']) : null,
       companionshipId: json['companionship_id'],
@@ -78,6 +81,7 @@ class Member {
       email: json['email'],
       phone: json['phone'],
       noSms: json['no_sms'] ?? false,
+      optedOut: json['opted_out'] ?? false,
       hasBooking: json['has_booking'] ?? false,
       district: json['district'] != null ? District.fromJson(json['district']) : null,
       companionshipId: json['companionship_id'],

@@ -2,7 +2,8 @@
 Public and member-facing routes for the Ministering Interview application.
 These routes do not require admin authentication.
 """
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+import os
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, send_from_directory, current_app
 from flask_user import current_user
 from datetime import datetime
 from sqlalchemy import func
@@ -12,6 +13,11 @@ from core.shared import mail
 
 # Create blueprint (no URL prefix - these are root-level routes)
 public_bp = Blueprint('public', __name__)
+
+
+@public_bp.route('/favicon.ico')
+def favicon():
+    return send_from_directory(current_app.static_folder, 'favicon.ico')
 
 
 @public_bp.route('/login_redirect')
@@ -199,36 +205,92 @@ def schedule(token):
     """Member scheduling interface"""
     member = Member.query.filter_by(token=token).first_or_404()
     district = member.companionship.district
-    current_quarter = ((datetime.now().month - 1) // 3) + 1
+    today = datetime.now().date()
 
-    # Find member's current booking for this quarter
+    # Calculate current and next quarter
+    current_quarter = ((datetime.now().month - 1) // 3) + 1
+    current_year = datetime.now().year
+    next_quarter = current_quarter + 1 if current_quarter < 4 else 1
+    next_year = current_year if current_quarter < 4 else current_year + 1
+
+    # Get target quarter from URL params (default to current)
+    target_quarter = request.args.get('q', type=int, default=current_quarter)
+    target_year = request.args.get('y', type=int, default=current_year)
+
+    # Validate: only allow current or next quarter
+    valid_quarters = [
+        (current_quarter, current_year),
+        (next_quarter, next_year)
+    ]
+    if (target_quarter, target_year) not in valid_quarters:
+        target_quarter = current_quarter
+        target_year = current_year
+
+    # Check which quarters have slots for this district
+    current_quarter_has_slots = InterviewSlot.query.filter_by(district_id=district.id).filter(
+        InterviewSlot.quarter == current_quarter,
+        func.extract('year', InterviewSlot.date) == current_year,
+        InterviewSlot.date >= today
+    ).first() is not None
+
+    next_quarter_has_slots = InterviewSlot.query.filter_by(district_id=district.id).filter(
+        InterviewSlot.quarter == next_quarter,
+        func.extract('year', InterviewSlot.date) == next_year
+    ).first() is not None
+
+    # Find member's UPCOMING booking for target quarter
     my_booking = Booking.query.join(InterviewSlot).filter(
         Booking.member_id == member.id,
-        InterviewSlot.quarter == current_quarter,
-        InterviewSlot.date >= datetime.now().date()
+        InterviewSlot.quarter == target_quarter,
+        func.extract('year', InterviewSlot.date) == target_year,
+        InterviewSlot.date >= today
     ).first()
 
-    # Find if any companion (companionship member) has already booked a slot
+    # Find member's PAST booking for target quarter
+    past_booking = Booking.query.join(InterviewSlot).filter(
+        Booking.member_id == member.id,
+        InterviewSlot.quarter == target_quarter,
+        func.extract('year', InterviewSlot.date) == target_year,
+        InterviewSlot.date < today
+    ).first()
+
+    # Find if any companion has already booked a slot (upcoming)
     companion_booking = None
+    past_companion_booking = None
     if member.companionship:
         for companionship_member in member.companionship.members:
-            if companionship_member.id != member.id:  # Check other companionship members
+            if companionship_member.id != member.id:
+                # Check for upcoming booking
                 booking = Booking.query.join(InterviewSlot).filter(
                     Booking.member_id == companionship_member.id,
-                    InterviewSlot.quarter == current_quarter,
-                    InterviewSlot.date >= datetime.now().date()
+                    InterviewSlot.quarter == target_quarter,
+                    func.extract('year', InterviewSlot.date) == target_year,
+                    InterviewSlot.date >= today
                 ).first()
-                if booking:
+                if booking and not companion_booking:
                     companion_booking = {
                         'slot': booking.slot,
                         'companion_name': companionship_member.name
                     }
-                    break  # Only show first companion's booking
 
-    # Get all slots for this district and quarter
+                # Check for past booking
+                past = Booking.query.join(InterviewSlot).filter(
+                    Booking.member_id == companionship_member.id,
+                    InterviewSlot.quarter == target_quarter,
+                    func.extract('year', InterviewSlot.date) == target_year,
+                    InterviewSlot.date < today
+                ).first()
+                if past and not past_companion_booking:
+                    past_companion_booking = {
+                        'slot': past.slot,
+                        'companion_name': companionship_member.name
+                    }
+
+    # Get all slots for this district and target quarter
     all_slots = InterviewSlot.query.filter_by(district_id=district.id).filter(
-        InterviewSlot.date >= datetime.now().date(),
-        InterviewSlot.quarter == current_quarter
+        InterviewSlot.date >= today,
+        InterviewSlot.quarter == target_quarter,
+        func.extract('year', InterviewSlot.date) == target_year
     ).order_by(InterviewSlot.date, InterviewSlot.start_time).all()
 
     # Filter to only show slots that are available to book, but always include:
@@ -261,7 +323,23 @@ def schedule(token):
     msg_config = MessageTemplates.get_or_create()
     custom_instructions = msg_config.custom_instructions if msg_config else None
 
-    return render_template('schedule.html', member=member, slots=available_slots, companion_booking=companion_booking, my_booking=my_booking, custom_instructions=custom_instructions)
+    return render_template('schedule.html',
+        member=member,
+        slots=available_slots,
+        companion_booking=companion_booking,
+        my_booking=my_booking,
+        past_booking=past_booking,
+        past_companion_booking=past_companion_booking,
+        custom_instructions=custom_instructions,
+        target_quarter=target_quarter,
+        target_year=target_year,
+        current_quarter=current_quarter,
+        current_year=current_year,
+        next_quarter=next_quarter,
+        next_year=next_year,
+        current_quarter_has_slots=current_quarter_has_slots,
+        next_quarter_has_slots=next_quarter_has_slots
+    )
 
 
 @public_bp.route('/book/<int:slot_id>/<token>', methods=['POST'])
@@ -271,32 +349,44 @@ def book_slot(slot_id, token):
     slot = InterviewSlot.query.get_or_404(slot_id)
     interview_type = request.form.get('interview_type', 'in-person')
 
-    # Check if member already has a booking for this quarter
-    current_quarter = ((datetime.now().month - 1) // 3) + 1
-    current_year = datetime.now().year
+    # Get quarter params to preserve in redirect
+    target_quarter = request.form.get('q', type=int) or request.args.get('q', type=int)
+    target_year = request.form.get('y', type=int) or request.args.get('y', type=int)
+
+    # Use the slot's quarter for validation
+    slot_quarter = slot.quarter
+    slot_year = slot.date.year
+
+    # Check if member already has an upcoming booking for this slot's quarter
     existing_quarter_booking = Booking.query.join(InterviewSlot).filter(
         Booking.member_id == member.id,
-        InterviewSlot.quarter == current_quarter,
-        db.extract('year', InterviewSlot.date) == current_year,
+        InterviewSlot.quarter == slot_quarter,
+        func.extract('year', InterviewSlot.date) == slot_year,
         InterviewSlot.date >= datetime.now().date()
     ).first()
 
+    redirect_params = {'token': token}
+    if target_quarter:
+        redirect_params['q'] = target_quarter
+    if target_year:
+        redirect_params['y'] = target_year
+
     if existing_quarter_booking:
         flash('You already have a booking for this quarter. Please cancel it first if you want to book a different time.', 'warning')
-        return redirect(url_for('public.schedule', token=token))
+        return redirect(url_for('public.schedule', **redirect_params))
 
     # Check if already booked for this specific slot (shouldn't happen with above check, but keep as safety)
     existing = Booking.query.filter_by(slot_id=slot_id, member_id=member.id).first()
     if existing:
         flash('You are already booked for this slot.')
-        return redirect(url_for('public.schedule', token=token))
+        return redirect(url_for('public.schedule', **redirect_params))
 
     # Check companionship restriction
     if slot.bookings:
         existing_companionship = slot.bookings[0].member.companionship
         if member.companionship != existing_companionship:
             flash('This slot is reserved for another companionship.')
-            return redirect(url_for('public.schedule', token=token))
+            return redirect(url_for('public.schedule', **redirect_params))
 
     if len(slot.bookings) < slot.max_slots:
         booking = Booking(slot_id=slot_id, member_id=member.id, interview_type=interview_type)
@@ -306,21 +396,37 @@ def book_slot(slot_id, token):
     else:
         flash('Slot is full.', 'error')
 
-    return redirect(url_for('public.schedule', token=token))
+    return redirect(url_for('public.schedule', **redirect_params))
 
 
 @public_bp.route('/unbook/<token>', methods=['POST'])
 def unbook_slot(token):
     """Cancel an interview booking"""
     member = Member.query.filter_by(token=token).first_or_404()
-    current_quarter = ((datetime.now().month - 1) // 3) + 1
 
-    # Find member's current booking for this quarter
+    # Get quarter params from form or URL
+    target_quarter = request.form.get('q', type=int) or request.args.get('q', type=int)
+    target_year = request.form.get('y', type=int) or request.args.get('y', type=int)
+
+    # Default to current quarter if not specified
+    if not target_quarter:
+        target_quarter = ((datetime.now().month - 1) // 3) + 1
+    if not target_year:
+        target_year = datetime.now().year
+
+    # Find member's current booking for the target quarter
     booking = Booking.query.join(InterviewSlot).filter(
         Booking.member_id == member.id,
-        InterviewSlot.quarter == current_quarter,
+        InterviewSlot.quarter == target_quarter,
+        func.extract('year', InterviewSlot.date) == target_year,
         InterviewSlot.date >= datetime.now().date()
     ).first()
+
+    redirect_params = {'token': token}
+    if target_quarter:
+        redirect_params['q'] = target_quarter
+    if target_year:
+        redirect_params['y'] = target_year
 
     if booking:
         db.session.delete(booking)
@@ -329,4 +435,4 @@ def unbook_slot(token):
     else:
         flash('No booking found to cancel.', 'error')
 
-    return redirect(url_for('public.schedule', token=token))
+    return redirect(url_for('public.schedule', **redirect_params))

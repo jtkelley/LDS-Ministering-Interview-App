@@ -74,8 +74,8 @@ class InviteService {
     try {
       final launched = await launchUrl(uri);
       if (launched) {
-        // Log the notification
-        await _apiService.logNotification(member.id, 'email');
+        // Log the notification with target quarter
+        await _apiService.logNotification(member.id, 'email', quarter: quarter, year: year);
       }
       return launched;
     } catch (e) {
@@ -84,7 +84,7 @@ class InviteService {
   }
 
   /// Send individual SMS via native SMS app (iOS and Android fallback)
-  Future<bool> sendSmsNative(Member member) async {
+  Future<bool> sendSmsNative(Member member, {int? quarter, int? year}) async {
     if (!member.canReceiveSms) return false;
 
     final message = Uri.encodeComponent(await getSmsMessage(member));
@@ -93,8 +93,8 @@ class InviteService {
     try {
       final launched = await launchUrl(uri);
       if (launched) {
-        // Log the notification
-        await _apiService.logNotification(member.id, 'sms');
+        // Log the notification with target quarter
+        await _apiService.logNotification(member.id, 'sms', quarter: quarter, year: year);
       }
       return launched;
     } catch (e) {
@@ -116,7 +116,7 @@ class InviteService {
 
   /// Send bulk SMS on Android (uses device SMS plan - FREE)
   /// Returns map with 'sent' and 'failed' counts
-  Future<Map<String, int>> sendBulkSmsAndroid(List<Member> members) async {
+  Future<Map<String, int>> sendBulkSmsAndroid(List<Member> members, {int? quarter, int? year}) async {
     if (!Platform.isAndroid) {
       return {'sent': 0, 'failed': members.length};
     }
@@ -152,9 +152,9 @@ class InviteService {
       }
     }
 
-    // Log all sent notifications to backend
+    // Log all sent notifications to backend with target quarter
     if (sentMemberIds.isNotEmpty) {
-      await _apiService.logBulkNotifications(sentMemberIds, 'sms');
+      await _apiService.logBulkNotifications(sentMemberIds, 'sms', quarter: quarter, year: year);
     }
 
     return {'sent': sent, 'failed': failed};
@@ -162,13 +162,13 @@ class InviteService {
 
   /// Send sequential SMS on iOS (opens native app for each)
   /// Returns after opening first SMS - user must manually proceed through each
-  Future<int> sendSequentialSmsIOS(List<Member> members) async {
+  Future<int> sendSequentialSmsIOS(List<Member> members, {int? quarter, int? year}) async {
     int opened = 0;
 
     for (final member in members) {
       if (!member.canReceiveSms) continue;
 
-      final sent = await sendSmsNative(member);
+      final sent = await sendSmsNative(member, quarter: quarter, year: year);
       if (sent) {
         opened++;
         // Small delay to let user interact with each message
@@ -180,8 +180,8 @@ class InviteService {
   }
 
   /// Send bulk emails via server (works on all platforms)
-  Future<Map<String, dynamic>> sendBulkEmailViaServer(List<Member> members) async {
+  Future<Map<String, dynamic>> sendBulkEmailViaServer(List<Member> members, {int? quarter, int? year}) async {
     final memberIds = members.map((m) => m.id).toList();
-    return await _apiService.sendBulkEmail(memberIds);
+    return await _apiService.sendBulkEmail(memberIds, quarter: quarter, year: year);
   }
 }

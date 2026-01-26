@@ -107,6 +107,19 @@ class ApiService {
     return null;
   }
 
+  /// Get available quarters (current and next) with slot availability
+  Future<Map<String, dynamic>?> getAvailableQuarters() async {
+    final response = await http.get(
+      Uri.parse(ApiConfig.url(ApiConfig.quarterAvailableEndpoint)),
+      headers: await _authHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    return null;
+  }
+
   /// Get all districts
   Future<List<District>> getDistricts() async {
     final response = await http.get(
@@ -124,9 +137,13 @@ class ApiService {
   }
 
   /// Get members with optional filtering
+  /// [filterMode] can be: 'all', 'not_booked', 'companionship_not_booked'
   Future<Map<String, dynamic>> getMembers({
     int? districtId,
     bool needsInviteOnly = false,
+    String filterMode = 'all',
+    int? quarter,
+    int? year,
   }) async {
     var url = ApiConfig.url(ApiConfig.membersEndpoint);
     final params = <String>[];
@@ -134,8 +151,17 @@ class ApiService {
     if (districtId != null) {
       params.add('district_id=$districtId');
     }
-    if (needsInviteOnly) {
+    if (filterMode != 'all') {
+      params.add('filter=$filterMode');
+    } else if (needsInviteOnly) {
+      // Backward compat
       params.add('needs_invite=true');
+    }
+    if (quarter != null) {
+      params.add('quarter=$quarter');
+    }
+    if (year != null) {
+      params.add('year=$year');
     }
 
     if (params.isNotEmpty) {
@@ -162,9 +188,15 @@ class ApiService {
   }
 
   /// Get member details
-  Future<Member?> getMemberDetail(int memberId) async {
+  Future<Member?> getMemberDetail(int memberId, {int? quarter, int? year}) async {
+    var url = ApiConfig.url(ApiConfig.memberDetailEndpoint(memberId));
+    final params = <String>[];
+    if (quarter != null) params.add('quarter=$quarter');
+    if (year != null) params.add('year=$year');
+    if (params.isNotEmpty) url = '$url?${params.join('&')}';
+
     final response = await http.get(
-      Uri.parse(ApiConfig.url(ApiConfig.memberDetailEndpoint(memberId))),
+      Uri.parse(url),
       headers: await _authHeaders(),
     );
 
@@ -176,7 +208,7 @@ class ApiService {
   }
 
   /// Log a notification sent via native app
-  Future<bool> logNotification(int memberId, String method, {bool success = true, String? errorMessage}) async {
+  Future<bool> logNotification(int memberId, String method, {bool success = true, String? errorMessage, int? quarter, int? year}) async {
     final response = await http.post(
       Uri.parse(ApiConfig.url(ApiConfig.logNotificationEndpoint(memberId))),
       headers: await _authHeaders(),
@@ -184,6 +216,8 @@ class ApiService {
         'method': method,
         'success': success,
         if (errorMessage != null) 'error_message': errorMessage,
+        if (quarter != null) 'quarter': quarter,
+        if (year != null) 'year': year,
       }),
     );
 
@@ -191,11 +225,15 @@ class ApiService {
   }
 
   /// Send bulk emails via server
-  Future<Map<String, dynamic>> sendBulkEmail(List<int> memberIds) async {
+  Future<Map<String, dynamic>> sendBulkEmail(List<int> memberIds, {int? quarter, int? year}) async {
+    final body = <String, dynamic>{'member_ids': memberIds};
+    if (quarter != null) body['quarter'] = quarter;
+    if (year != null) body['year'] = year;
+
     final response = await http.post(
       Uri.parse(ApiConfig.url(ApiConfig.bulkEmailEndpoint)),
       headers: await _authHeaders(),
-      body: jsonEncode({'member_ids': memberIds}),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode == 200) {
@@ -209,7 +247,7 @@ class ApiService {
   }
 
   /// Log bulk notifications (for Android bulk SMS)
-  Future<bool> logBulkNotifications(List<int> memberIds, String method, {bool success = true}) async {
+  Future<bool> logBulkNotifications(List<int> memberIds, String method, {bool success = true, int? quarter, int? year}) async {
     final response = await http.post(
       Uri.parse(ApiConfig.url(ApiConfig.logBulkEndpoint)),
       headers: await _authHeaders(),
@@ -217,6 +255,8 @@ class ApiService {
         'member_ids': memberIds,
         'method': method,
         'success': success,
+        if (quarter != null) 'quarter': quarter,
+        if (year != null) 'year': year,
       }),
     );
 

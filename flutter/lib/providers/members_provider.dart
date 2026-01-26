@@ -13,10 +13,16 @@ class MembersProvider with ChangeNotifier {
   List<District> _districts = [];
   Set<int> _selectedMemberIds = {};
   int? _filterDistrictId;
-  bool _filterNeedsInviteOnly = true;
+  String _bookingFilter = 'not_booked'; // 'all', 'not_booked', 'companionship_not_booked'
   String _searchQuery = '';
   int _currentQuarter = 1;
   int _currentYear = 2024;
+  int _targetQuarter = 1;
+  int _targetYear = 2024;
+  int _nextQuarter = 2;
+  int _nextYear = 2024;
+  bool _currentQuarterHasSlots = false;
+  bool _nextQuarterHasSlots = false;
   bool _isLoading = false;
   String? _error;
 
@@ -29,10 +35,16 @@ class MembersProvider with ChangeNotifier {
   List<District> get districts => _districts;
   Set<int> get selectedMemberIds => _selectedMemberIds;
   int? get filterDistrictId => _filterDistrictId;
-  bool get filterNeedsInviteOnly => _filterNeedsInviteOnly;
+  String get bookingFilter => _bookingFilter;
   String get searchQuery => _searchQuery;
   int get currentQuarter => _currentQuarter;
   int get currentYear => _currentYear;
+  int get targetQuarter => _targetQuarter;
+  int get targetYear => _targetYear;
+  int get nextQuarter => _nextQuarter;
+  int get nextYear => _nextYear;
+  bool get currentQuarterHasSlots => _currentQuarterHasSlots;
+  bool get nextQuarterHasSlots => _nextQuarterHasSlots;
   bool get isLoading => _isLoading;
   String? get error => _error;
   InviteService get inviteService => _inviteService;
@@ -66,6 +78,43 @@ class MembersProvider with ChangeNotifier {
     }
   }
 
+  /// Load available quarters (current and next with slot availability)
+  Future<void> loadAvailableQuarters() async {
+    try {
+      final result = await _apiService.getAvailableQuarters();
+      if (result != null) {
+        final current = result['current'] as Map<String, dynamic>;
+        final next = result['next'] as Map<String, dynamic>;
+
+        _currentQuarter = current['quarter'] as int;
+        _currentYear = current['year'] as int;
+        _currentQuarterHasSlots = current['has_slots'] as bool;
+
+        _nextQuarter = next['quarter'] as int;
+        _nextYear = next['year'] as int;
+        _nextQuarterHasSlots = next['has_slots'] as bool;
+
+        // Set target to current quarter by default
+        if (_targetQuarter == 0 || _targetYear == 0) {
+          _targetQuarter = _currentQuarter;
+          _targetYear = _currentYear;
+        }
+
+        notifyListeners();
+      }
+    } catch (e) {
+      _error = 'Failed to load quarter info: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Set target quarter and reload members
+  void setTargetQuarter(int quarter, int year) {
+    _targetQuarter = quarter;
+    _targetYear = year;
+    loadMembers();
+  }
+
   /// Load members with current filters
   Future<void> loadMembers() async {
     _isLoading = true;
@@ -75,12 +124,21 @@ class MembersProvider with ChangeNotifier {
     try {
       final result = await _apiService.getMembers(
         districtId: _filterDistrictId,
-        needsInviteOnly: _filterNeedsInviteOnly,
+        filterMode: _bookingFilter,
+        quarter: _targetQuarter > 0 ? _targetQuarter : null,
+        year: _targetYear > 0 ? _targetYear : null,
       );
 
       _members = result['members'] as List<Member>;
-      _currentQuarter = result['quarter'] as int;
-      _currentYear = result['year'] as int;
+      // Update target quarter from response
+      _targetQuarter = result['quarter'] as int;
+      _targetYear = result['year'] as int;
+
+      // Also update current if not set
+      if (_currentQuarter == 0) {
+        _currentQuarter = _targetQuarter;
+        _currentYear = _targetYear;
+      }
 
       // Clear selections for members no longer in list
       _selectedMemberIds.removeWhere(
@@ -101,9 +159,9 @@ class MembersProvider with ChangeNotifier {
     loadMembers();
   }
 
-  /// Toggle needs invite filter
-  void setNeedsInviteFilter(bool value) {
-    _filterNeedsInviteOnly = value;
+  /// Set booking filter mode: 'all', 'not_booked', 'companionship_not_booked'
+  void setBookingFilter(String mode) {
+    _bookingFilter = mode;
     loadMembers();
   }
 
@@ -160,7 +218,11 @@ class MembersProvider with ChangeNotifier {
       return {'sent': 0, 'failed': 0, 'message': 'No members with valid phone numbers'};
     }
 
-    final result = await _inviteService.sendBulkSmsAndroid(members);
+    final result = await _inviteService.sendBulkSmsAndroid(
+      members,
+      quarter: _targetQuarter > 0 ? _targetQuarter : null,
+      year: _targetYear > 0 ? _targetYear : null,
+    );
 
     // Reload to update notification status
     await loadMembers();
@@ -179,7 +241,11 @@ class MembersProvider with ChangeNotifier {
       return {'sent': 0, 'failed': 0, 'message': 'No members with valid email addresses'};
     }
 
-    final result = await _inviteService.sendBulkEmailViaServer(members);
+    final result = await _inviteService.sendBulkEmailViaServer(
+      members,
+      quarter: _targetQuarter > 0 ? _targetQuarter : null,
+      year: _targetYear > 0 ? _targetYear : null,
+    );
 
     // Reload to update notification status
     await loadMembers();
@@ -189,7 +255,11 @@ class MembersProvider with ChangeNotifier {
 
   /// Get member details
   Future<Member?> getMemberDetail(int memberId) async {
-    return await _apiService.getMemberDetail(memberId);
+    return await _apiService.getMemberDetail(
+      memberId,
+      quarter: _targetQuarter > 0 ? _targetQuarter : null,
+      year: _targetYear > 0 ? _targetYear : null,
+    );
   }
 
   /// Clear error

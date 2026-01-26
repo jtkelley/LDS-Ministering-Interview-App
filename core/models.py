@@ -210,6 +210,7 @@ class Member(db.Model):
     email = db.Column(db.String(120), nullable=False)
     token = db.Column(db.String(32), unique=True, nullable=False, default=lambda: secrets.token_hex(16))
     no_sms = db.Column(db.Boolean, nullable=False, default=False)  # Disable SMS for this member
+    opted_out = db.Column(db.Boolean, nullable=False, default=False)  # Opted out of all invitations
 
     # Matching fields - stores LCR/import data, used for matching algorithm
     match_email = db.Column(db.String(120))  # Email from LCR/import

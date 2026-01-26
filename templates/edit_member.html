@@ -33,6 +33,12 @@
                 </label>
             </div>
             <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="opted_out" name="opted_out" {% if member.opted_out %}checked{% endif %}>
+                <label class="form-check-label" for="opted_out">
+                    Opted out of invitations (will not receive any email or SMS invitations)
+                </label>
+            </div>
+            <div class="mb-3 form-check">
                 <input type="checkbox" class="form-check-input" id="is_active" name="is_active" {% if member.is_active %}checked{% endif %}>
                 <label class="form-check-label" for="is_active">
                     Active (uncheck to deactivate - hides from notifications but preserves history)

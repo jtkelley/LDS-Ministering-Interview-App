@@ -36,13 +36,14 @@ echo   - app.py
 echo   - requirements.txt
 echo   - core\
 echo   - templates\
+echo   - static\
 
 if /i "%INCLUDE_ENV%"=="Y" (
     echo   - .env
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'app.py','requirements.txt','core','templates','.env' -DestinationPath '%OUTPUT%' -Force"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'app.py','requirements.txt','core','templates','static','.env' -DestinationPath '%OUTPUT%' -Force"
 ) else (
     echo   - .env [SKIPPED]
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'app.py','requirements.txt','core','templates' -DestinationPath '%OUTPUT%' -Force"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path 'app.py','requirements.txt','core','templates','static' -DestinationPath '%OUTPUT%' -Force"
 )
 
 echo.

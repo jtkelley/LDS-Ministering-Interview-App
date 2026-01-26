@@ -229,9 +229,9 @@ def send_booking_reminders_with_sms():
                 print("Email not configured, skipping reminder job")
                 return
 
-            # Find all members without bookings for current quarter
+            # Find all active, non-opted-out members without bookings for current quarter
             members_without_bookings = []
-            all_members = Member.query.join(Companionship).join(District).all()
+            all_members = Member.query.filter_by(is_active=True, opted_out=False).join(Companionship).join(District).all()
 
             for member in all_members:
                 if not member.has_booking_for_quarter(current_quarter, current_year):

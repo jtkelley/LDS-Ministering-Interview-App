@@ -92,6 +92,13 @@ app.register_blueprint(api_bp)
 # Initialize database and load config
 with app.app_context():
     db.create_all()
+    # Add opted_out column if missing (for existing databases)
+    from sqlalchemy import inspect, text
+    inspector = inspect(db.engine)
+    cols = [c['name'] for c in inspector.get_columns('member')]
+    if 'opted_out' not in cols:
+        db.session.execute(text("ALTER TABLE member ADD COLUMN opted_out BOOLEAN NOT NULL DEFAULT 0"))
+        db.session.commit()
     # Initialize message templates with defaults if not present
     MessageTemplates.get_or_create()
     services.apply_email_config()

@@ -59,8 +59,8 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     final provider = context.read<MembersProvider>();
     final success = await provider.inviteService.sendEmailNative(
       _member!,
-      provider.currentQuarter,
-      provider.currentYear,
+      provider.targetQuarter,
+      provider.targetYear,
     );
 
     if (mounted) {
@@ -81,7 +81,11 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     if (_member == null || !_member!.canReceiveSms) return;
 
     final provider = context.read<MembersProvider>();
-    final success = await provider.inviteService.sendSmsNative(_member!);
+    final success = await provider.inviteService.sendSmsNative(
+      _member!,
+      quarter: provider.targetQuarter,
+      year: provider.targetYear,
+    );
 
     if (mounted) {
       if (success) {
@@ -144,6 +148,10 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
           children: [
             // Contact info card
             _buildContactCard(),
+            const SizedBox(height: 16),
+
+            // Quarter selector
+            _buildQuarterSelector(),
             const SizedBox(height: 16),
 
             // Send buttons
@@ -279,33 +287,122 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     );
   }
 
+  Widget _buildQuarterSelector() {
+    return Consumer<MembersProvider>(
+      builder: (context, provider, _) {
+        final showDropdown = provider.currentQuarterHasSlots || provider.nextQuarterHasSlots;
+        if (!showDropdown) {
+          return Text(
+            'Sending for Q${provider.targetQuarter} ${provider.targetYear}',
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          );
+        }
+
+        // Guard: only show dropdown if target matches an available option
+        final targetKey = '${provider.targetQuarter}_${provider.targetYear}';
+        final currentKey = '${provider.currentQuarter}_${provider.currentYear}';
+        final nextKey = '${provider.nextQuarter}_${provider.nextYear}';
+        final hasValidTarget = (provider.currentQuarterHasSlots && targetKey == currentKey) ||
+            (provider.nextQuarterHasSlots && targetKey == nextKey);
+
+        if (!hasValidTarget) {
+          return Text(
+            'Sending for Q${provider.targetQuarter} ${provider.targetYear}',
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          );
+        }
+
+        return Row(
+          children: [
+            const Text('Quarter: ', style: TextStyle(fontWeight: FontWeight.w500)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: DropdownButton<String>(
+                value: targetKey,
+                isExpanded: true,
+                items: [
+                  if (provider.currentQuarterHasSlots)
+                    DropdownMenuItem<String>(
+                      value: currentKey,
+                      child: Text('Q${provider.currentQuarter} ${provider.currentYear} (Current)'),
+                    ),
+                  if (provider.nextQuarterHasSlots)
+                    DropdownMenuItem<String>(
+                      value: nextKey,
+                      child: Text('Q${provider.nextQuarter} ${provider.nextYear} (Next)'),
+                    ),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    final parts = value.split('_');
+                    provider.setTargetQuarter(int.parse(parts[0]), int.parse(parts[1]));
+                    _loadMember(); // Reload member detail for new quarter
+                  }
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Widget _buildSendButtons() {
-    return Row(
+    final isOptedOut = _member!.optedOut;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _member!.canReceiveEmail ? _sendEmail : null,
-            icon: const Icon(Icons.email),
-            label: const Text('Send Email'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+        if (isOptedOut)
+          Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.block, size: 18, color: Colors.orange.shade700),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'This member has opted out of invitations',
+                    style: TextStyle(color: Colors.orange.shade700, fontSize: 13),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _member!.canReceiveSms ? _sendSms : null,
-            icon: const Icon(Icons.sms),
-            label: const Text('Send SMS'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(vertical: 12),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: (!isOptedOut && _member!.canReceiveEmail) ? _sendEmail : null,
+                icon: const Icon(Icons.email),
+                label: const Text('Send Email'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: (!isOptedOut && _member!.canReceiveSms) ? _sendSms : null,
+                icon: Icon(_member!.noSms ? Icons.sms_failed : Icons.sms),
+                label: const Text('Send SMS'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -361,20 +458,19 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                       Icon(
                         m.hasBooking
                             ? Icons.check_circle
-                            : Icons.radio_button_unchecked,
+                            : Icons.remove,
                         size: 18,
                         color: m.hasBooking ? Colors.green : Colors.grey,
                       ),
                       const SizedBox(width: 8),
                       Text(m.name),
-                      if (m.hasBooking)
-                        Text(
-                          ' (booked)',
-                          style: TextStyle(
-                            color: Colors.green.shade600,
-                            fontSize: 12,
-                          ),
+                      Text(
+                        m.hasBooking ? ' (booked)' : ' (not booked)',
+                        style: TextStyle(
+                          color: m.hasBooking ? Colors.green.shade600 : Colors.grey.shade600,
+                          fontSize: 12,
                         ),
+                      ),
                     ],
                   ),
                 )),

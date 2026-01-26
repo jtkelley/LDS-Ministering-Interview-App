@@ -67,6 +67,14 @@
                         <label for="end_date" class="form-label">End Date:</label>
                         <input type="date" class="form-control" id="end_date" name="end_date" value="{{ default_end_date }}" required>
                     </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="apply_all" name="apply_all" value="1">
+                        <label class="form-check-label" for="apply_all">Apply to all districts</label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="skip_first_sunday" name="skip_first_sunday" value="1">
+                        <label class="form-check-label" for="skip_first_sunday">Skip first Sunday of month</label>
+                    </div>
                     <button type="submit" class="btn btn-primary">Generate Recurring Slots</button>
                 </form>
             </div>

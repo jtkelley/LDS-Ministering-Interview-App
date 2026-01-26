@@ -35,6 +35,7 @@ class ApiConfig {
   static const String loginEndpoint = '/api/auth/login';
   static const String meEndpoint = '/api/auth/me';
   static const String quarterEndpoint = '/api/quarter/current';
+  static const String quarterAvailableEndpoint = '/api/quarter/available';
   static const String districtsEndpoint = '/api/districts';
   static const String membersEndpoint = '/api/members';
   static String memberDetailEndpoint(int id) => '/api/members/$id';
