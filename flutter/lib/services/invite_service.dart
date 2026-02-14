@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:another_telephony/telephony.dart';
 import '../models/member.dart';
@@ -141,13 +142,21 @@ class InviteService {
 
       try {
         final message = templates.formatSms(member.name, member.schedulingLink ?? '');
+        debugPrint('Sending SMS to ${member.phone} (${message.length} chars)');
         await _telephony.sendSms(
           to: member.phone!,
           message: message,
+          isMultipart: true,
+          statusListener: (SendStatus status) {
+            debugPrint('SMS to ${member.phone}: $status');
+          },
         );
         sent++;
         sentMemberIds.add(member.id);
+        // Delay between sends to prevent carrier throttling
+        await Future.delayed(const Duration(milliseconds: 500));
       } catch (e) {
+        debugPrint('SMS send error for ${member.phone}: $e');
         failed++;
       }
     }
@@ -223,13 +232,21 @@ class InviteService {
 
       try {
         final message = _getReminderSmsMessage(member);
+        debugPrint('Sending reminder SMS to ${member.phone} (${message.length} chars)');
         await _telephony.sendSms(
           to: member.phone!,
           message: message,
+          isMultipart: true,
+          statusListener: (SendStatus status) {
+            debugPrint('Reminder SMS to ${member.phone}: $status');
+          },
         );
         sent++;
         sentMemberIds.add(member.id);
+        // Delay between sends to prevent carrier throttling
+        await Future.delayed(const Duration(milliseconds: 500));
       } catch (e) {
+        debugPrint('Reminder SMS send error for ${member.phone}: $e');
         failed++;
       }
     }
