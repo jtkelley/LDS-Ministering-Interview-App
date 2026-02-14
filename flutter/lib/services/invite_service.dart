@@ -184,4 +184,69 @@ class InviteService {
     final memberIds = members.map((m) => m.id).toList();
     return await _apiService.sendBulkEmail(memberIds, quarter: quarter, year: year);
   }
+
+  /// Generate reminder SMS message with appointment details
+  String _getReminderSmsMessage(Member member) {
+    final dateTime = member.formattedBookingDateTime;
+    // Convert "Last, First" to "First Last"
+    String displayName = member.name;
+    if (member.name.contains(',')) {
+      final parts = member.name.split(',').map((s) => s.trim()).toList();
+      if (parts.length >= 2) {
+        displayName = '${parts[1]} ${parts[0]}';
+      }
+    }
+    return 'Hi $displayName, this is a reminder that your ministering interview is scheduled for $dateTime. '
+        'If you need to change or cancel, use this link: ${member.schedulingLink}';
+  }
+
+  /// Send reminder SMS on Android for members with upcoming appointments
+  Future<Map<String, int>> sendReminderSmsAndroid(List<Member> members, {int? quarter, int? year}) async {
+    if (!Platform.isAndroid) {
+      return {'sent': 0, 'failed': members.length};
+    }
+
+    final hasPermission = await canSendDirectSms();
+    if (!hasPermission) {
+      return {'sent': 0, 'failed': members.length};
+    }
+
+    int sent = 0;
+    int failed = 0;
+    final sentMemberIds = <int>[];
+
+    for (final member in members) {
+      if (!member.canReceiveSms || !member.hasBookingDetails) {
+        failed++;
+        continue;
+      }
+
+      try {
+        final message = _getReminderSmsMessage(member);
+        await _telephony.sendSms(
+          to: member.phone!,
+          message: message,
+        );
+        sent++;
+        sentMemberIds.add(member.id);
+      } catch (e) {
+        failed++;
+      }
+    }
+
+    // Log all sent notifications to backend
+    if (sentMemberIds.isNotEmpty) {
+      await _apiService.logBulkNotifications(sentMemberIds, 'sms', quarter: quarter, year: year);
+    }
+
+    return {'sent': sent, 'failed': failed};
+  }
+
+  /// Send reminder emails via server for members with upcoming appointments
+  Future<Map<String, dynamic>> sendReminderEmailViaServer(List<Member> members, {int? quarter, int? year}) async {
+    final memberIds = members.where((m) => m.hasBookingDetails).map((m) => m.id).toList();
+    // Use the regular bulk email endpoint but the backend will need to know it's a reminder
+    // For now, we'll use the existing endpoint and the server handles it
+    return await _apiService.sendReminderEmail(memberIds, quarter: quarter, year: year);
+  }
 }

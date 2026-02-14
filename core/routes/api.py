@@ -220,6 +220,7 @@ def get_members():
             'all' - show all members (default)
             'not_booked' - only members who have not booked
             'companionship_not_booked' - only members where no one in companionship has booked
+            'upcoming_7_days' - only members with appointments in the next 7 days
         needs_invite: (deprecated, same as filter=not_booked) If 'true', only return members without bookings
         quarter: Target quarter (1-4), defaults to current
         year: Target year, defaults to current
@@ -246,7 +247,71 @@ def get_members():
     if request.args.get('needs_invite', '').lower() == 'true' and filter_mode == 'all':
         filter_mode = 'not_booked'
 
-    # Build base query
+    # Special handling for upcoming_7_days filter
+    if filter_mode == 'upcoming_7_days':
+        today = datetime.now().date()
+        seven_days_from_now = today + timedelta(days=7)
+
+        # Query members with bookings in the next 7 days
+        query = db.session.query(Member, InterviewSlot, Booking).join(
+            Companionship, Member.companionship_id == Companionship.id
+        ).join(
+            District, Companionship.district_id == District.id
+        ).join(
+            Booking, Member.id == Booking.member_id
+        ).join(
+            InterviewSlot, Booking.slot_id == InterviewSlot.id
+        ).filter(
+            InterviewSlot.date >= today,
+            InterviewSlot.date <= seven_days_from_now
+        )
+
+        # Filter by district if specified
+        district_id = request.args.get('district_id')
+        if district_id:
+            query = query.filter(District.id == int(district_id))
+
+        query = query.order_by(InterviewSlot.date, InterviewSlot.start_time)
+        rows = query.all()
+
+        result = []
+        for member, slot, booking in rows:
+            last_notification = NotificationLog.query.filter_by(
+                member_id=member.id
+            ).order_by(NotificationLog.sent_at.desc()).first()
+
+            district = member.companionship.district
+
+            result.append({
+                'id': member.id,
+                'name': member.name,
+                'email': member.email,
+                'phone': member.phone,
+                'no_sms': member.no_sms,
+                'opted_out': member.opted_out,
+                'has_booking': True,
+                'booking_date': slot.date.isoformat(),
+                'booking_time': slot.start_time.strftime('%H:%M'),
+                'booking_duration': slot.duration,
+                'interview_type': booking.interview_type,
+                'district': {
+                    'id': district.id,
+                    'name': district.name,
+                    'interviewer_name': district.interviewer_name
+                },
+                'companionship_id': member.companionship_id,
+                'last_notification': last_notification.sent_at.isoformat() if last_notification else None,
+                'scheduling_link': url_for('public.schedule', token=member.token, q=target_quarter, y=target_year, _external=True)
+            })
+
+        return jsonify({
+            'members': result,
+            'quarter': target_quarter,
+            'year': target_year,
+            'total_count': len(result)
+        })
+
+    # Build base query for other filters
     query = Member.query.join(Companionship).join(District)
 
     # Filter by district
@@ -534,6 +599,156 @@ def send_bulk_email():
         'quarter': target_quarter,
         'year': target_year,
         'message': f'Sent {sent_count} emails for Q{target_quarter} {target_year}, {failed_count} failed'
+    })
+
+
+@api_bp.route('/notifications/send-reminder-email', methods=['POST'])
+@token_required
+def send_reminder_email():
+    """
+    Send appointment reminder emails to members with upcoming appointments.
+
+    Request body:
+        {"member_ids": [1, 2, 3, ...], "quarter": 1, "year": 2026}
+
+    Response:
+        {"sent": 5, "failed": 1, "errors": [...]}
+    """
+    data = request.get_json()
+
+    if not data or not data.get('member_ids'):
+        return jsonify({'error': 'member_ids array is required'}), 400
+
+    member_ids = data['member_ids']
+    if not isinstance(member_ids, list):
+        return jsonify({'error': 'member_ids must be an array'}), 400
+
+    current_quarter, current_year = get_current_quarter()
+    target_quarter = data.get('quarter', current_quarter)
+    target_year = data.get('year', current_year)
+
+    # Load email config
+    services.apply_email_config()
+    sender_email = current_app.config.get('MAIL_DEFAULT_SENDER')
+
+    if not sender_email:
+        return jsonify({'error': 'Email not configured on server'}), 500
+
+    sent_count = 0
+    failed_count = 0
+    errors = []
+
+    for member_id in member_ids:
+        member = Member.query.get(member_id)
+        if not member:
+            errors.append(f'Member {member_id} not found')
+            failed_count += 1
+            continue
+
+        if member.opted_out:
+            errors.append(f'{member.name}: Opted out')
+            failed_count += 1
+            continue
+
+        if not member.email:
+            errors.append(f'{member.name}: No email address')
+            failed_count += 1
+            continue
+
+        # Get the member's upcoming booking
+        today = datetime.now().date()
+        seven_days = today + timedelta(days=7)
+        booking = db.session.query(Booking, InterviewSlot).join(
+            InterviewSlot, Booking.slot_id == InterviewSlot.id
+        ).filter(
+            Booking.member_id == member.id,
+            InterviewSlot.date >= today,
+            InterviewSlot.date <= seven_days
+        ).first()
+
+        if not booking:
+            errors.append(f'{member.name}: No upcoming appointment in next 7 days')
+            failed_count += 1
+            continue
+
+        booking_record, slot = booking
+
+        try:
+            link = url_for('public.schedule', token=member.token, q=target_quarter, y=target_year, _external=True)
+
+            # Format the appointment date/time
+            weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            months = ['January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December']
+            weekday = weekdays[slot.date.weekday()]
+            month = months[slot.date.month - 1]
+            hour = slot.start_time.hour
+            minute = slot.start_time.strftime('%M')
+            period = 'PM' if hour >= 12 else 'AM'
+            hour12 = hour if hour <= 12 else hour - 12
+            if hour12 == 0:
+                hour12 = 12
+            formatted_datetime = f'{weekday}, {month} {slot.date.day} at {hour12}:{minute} {period}'
+
+            # Convert "Last, First" to "First Last"
+            display_name = member.name
+            if ',' in member.name:
+                parts = [p.strip() for p in member.name.split(',')]
+                if len(parts) >= 2:
+                    display_name = f'{parts[1]} {parts[0]}'
+
+            # Build reminder email
+            subject = 'Reminder: Your Ministering Interview Appointment'
+            body = f'''<p>Hi {display_name},</p>
+
+<p>This is a friendly reminder that your ministering interview is scheduled for:</p>
+
+<p><strong>{formatted_datetime}</strong></p>
+
+<p>If you need to change or cancel your appointment, please use the link below:</p>
+<p><a href="{link}">{link}</a></p>
+
+<p>We look forward to seeing you!</p>'''
+
+            msg = Message(subject, sender=sender_email, recipients=[member.email])
+            msg.html = body
+            msg.body = services.html_to_plain_text(body)
+            mail.send(msg)
+
+            # Log the notification
+            log = NotificationLog(
+                member_id=member.id,
+                method='email',
+                quarter=target_quarter,
+                year=target_year,
+                success=True
+            )
+            db.session.add(log)
+            sent_count += 1
+
+        except Exception as e:
+            # Log failed notification
+            log = NotificationLog(
+                member_id=member.id,
+                method='email',
+                quarter=target_quarter,
+                year=target_year,
+                success=False,
+                error_message=str(e)
+            )
+            db.session.add(log)
+            errors.append(f'{member.name}: {str(e)}')
+            failed_count += 1
+
+    db.session.commit()
+
+    return jsonify({
+        'sent': sent_count,
+        'failed': failed_count,
+        'errors': errors,
+        'quarter': target_quarter,
+        'year': target_year,
+        'message': f'Sent {sent_count} reminder emails, {failed_count} failed'
     })
 
 

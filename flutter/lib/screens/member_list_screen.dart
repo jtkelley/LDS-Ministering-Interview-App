@@ -118,13 +118,22 @@ class _MemberListScreenState extends State<MemberListScreen> {
       ),
     );
 
-    final result = await provider.sendBulkSms();
+    try {
+      final result = await provider.sendBulkSms();
 
-    if (mounted) {
-      Navigator.pop(context); // Close progress dialog
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message'] ?? 'Done')),
-      );
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Done')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending SMS: $e')),
+        );
+      }
     }
   }
 
@@ -176,13 +185,160 @@ class _MemberListScreenState extends State<MemberListScreen> {
       ),
     );
 
-    final result = await provider.sendBulkEmail();
+    try {
+      final result = await provider.sendBulkEmail();
 
-    if (mounted) {
-      Navigator.pop(context); // Close progress dialog
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Done')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending emails: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendReminderSms() async {
+    final provider = context.read<MembersProvider>();
+    final selectedCount = provider.selectedMembers.where((m) => m.canReceiveSms).length;
+
+    if (selectedCount == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['message'] ?? 'Done')),
+        const SnackBar(content: Text('No selected members have valid phone numbers')),
       );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Reminder SMS'),
+        content: Text(
+          Platform.isAndroid
+              ? 'Send appointment reminder SMS to $selectedCount members using your phone plan?'
+              : 'This will open your Messages app for each of the $selectedCount members.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+
+    // Show progress indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Sending reminder SMS...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final result = await provider.sendReminderSms();
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Done')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending reminder SMS: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _sendReminderEmail() async {
+    final provider = context.read<MembersProvider>();
+    final selectedCount = provider.selectedMembers.where((m) => m.canReceiveEmail).length;
+
+    if (selectedCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No selected members have valid email addresses')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Send Reminder Emails'),
+        content: Text('Send appointment reminder emails to $selectedCount members?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Send'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+
+    // Show progress indicator
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const AlertDialog(
+        content: Row(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(width: 16),
+            Text('Sending reminder emails...'),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final result = await provider.sendReminderEmail();
+
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Done')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close progress dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error sending reminder emails: $e')),
+        );
+      }
     }
   }
 
@@ -348,6 +504,10 @@ class _MemberListScreenState extends State<MemberListScreen> {
                           value: 'companionship_not_booked',
                           child: Text('Companionship Not Booked'),
                         ),
+                        DropdownMenuItem(
+                          value: 'upcoming_7_days',
+                          child: Text('Upcoming Appts (7 days)'),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value != null) {
@@ -373,9 +533,10 @@ class _MemberListScreenState extends State<MemberListScreen> {
             .where((m) => provider.selectedMemberIds.contains(m.id))
             .length;
         final totalCount = filteredMembers.length;
+        final isReminderMode = provider.bookingFilter == 'upcoming_7_days';
 
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: selectedInView > 0 ? Colors.blue.shade50 : Colors.white,
             border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
@@ -388,37 +549,72 @@ class _MemberListScreenState extends State<MemberListScreen> {
                 tristate: true,
                 onChanged: (_) => provider.toggleSelectAll(),
               ),
-              Text(
-                selectedInView > 0
-                    ? '$selectedInView of $totalCount selected'
-                    : '$totalCount members',
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              Flexible(
+                child: Text(
+                  selectedInView > 0
+                      ? '$selectedInView/$totalCount'
+                      : '$totalCount members',
+                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
 
               // Bulk action buttons (show if any members are selected across all views)
               if (provider.selectedMemberIds.isNotEmpty) ...[
-                ElevatedButton.icon(
-                  onPressed: _sendBulkSms,
-                  icon: const Icon(Icons.sms, size: 18),
-                  label: const Text('SMS'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                if (isReminderMode) ...[
+                  // Reminder buttons for upcoming appointments (compact, orange theme)
+                  SizedBox(
+                    height: 32,
+                    child: ElevatedButton.icon(
+                      onPressed: _sendReminderSms,
+                      icon: const Icon(Icons.sms, size: 16),
+                      label: const Text('SMS', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed: _sendBulkEmail,
-                  icon: const Icon(Icons.email, size: 18),
-                  label: const Text('Email'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  const SizedBox(width: 4),
+                  SizedBox(
+                    height: 32,
+                    child: ElevatedButton.icon(
+                      onPressed: _sendReminderEmail,
+                      icon: const Icon(Icons.email, size: 16),
+                      label: const Text('Email', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepOrange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
                   ),
-                ),
+                ] else ...[
+                  // Regular invite buttons
+                  ElevatedButton.icon(
+                    onPressed: _sendBulkSms,
+                    icon: const Icon(Icons.sms, size: 18),
+                    label: const Text('SMS'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _sendBulkEmail,
+                    icon: const Icon(Icons.email, size: 18),
+                    label: const Text('Email'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                  ),
+                ],
               ],
             ],
           ),
@@ -551,6 +747,20 @@ class _MemberListTile extends StatelessWidget {
             Text(
               member.district!.name,
               style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            ),
+          // Show booking date/time if available (from upcoming_7_days filter)
+          if (member.hasBookingDetails)
+            Row(
+              children: [
+                Icon(Icons.event, size: 14, color: Colors.green.shade600),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    member.formattedBookingDateTime,
+                    style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
             ),
           if (member.optedOut)
             Text(

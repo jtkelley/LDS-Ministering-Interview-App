@@ -230,20 +230,39 @@ class ApiService {
     if (quarter != null) body['quarter'] = quarter;
     if (year != null) body['year'] = year;
 
-    final response = await http.post(
-      Uri.parse(ApiConfig.url(ApiConfig.bulkEmailEndpoint)),
-      headers: await _authHeaders(),
-      body: jsonEncode(body),
-    );
+    final url = ApiConfig.url(ApiConfig.bulkEmailEndpoint);
+    print('BULK EMAIL: POST to $url with ${memberIds.length} members');
 
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: await _authHeaders(),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 120));
+
+      print('BULK EMAIL: Response status ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        print('BULK EMAIL: Success - ${result['sent']} sent, ${result['failed']} failed');
+        return result;
+      }
+      print('BULK EMAIL: Server error ${response.statusCode}');
+      return {
+        'sent': 0,
+        'failed': memberIds.length,
+        'errors': ['Server error: ${response.statusCode}'],
+        'message': 'Server error: ${response.statusCode}',
+      };
+    } catch (e) {
+      print('BULK EMAIL: Exception - $e');
+      return {
+        'sent': 0,
+        'failed': memberIds.length,
+        'errors': ['Request failed: $e'],
+        'message': 'Request failed: $e',
+      };
     }
-    return {
-      'sent': 0,
-      'failed': memberIds.length,
-      'errors': ['Server error: ${response.statusCode}'],
-    };
   }
 
   /// Log bulk notifications (for Android bulk SMS)
@@ -279,5 +298,37 @@ class ApiService {
       print('Error fetching message templates: $e');
     }
     return null;
+  }
+
+  /// Send reminder emails via server for members with upcoming appointments
+  Future<Map<String, dynamic>> sendReminderEmail(List<int> memberIds, {int? quarter, int? year}) async {
+    final body = <String, dynamic>{'member_ids': memberIds};
+    if (quarter != null) body['quarter'] = quarter;
+    if (year != null) body['year'] = year;
+
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.url(ApiConfig.reminderEmailEndpoint)),
+        headers: await _authHeaders(),
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 120));
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+      return {
+        'sent': 0,
+        'failed': memberIds.length,
+        'errors': ['Server error: ${response.statusCode}'],
+        'message': 'Server error: ${response.statusCode}',
+      };
+    } catch (e) {
+      return {
+        'sent': 0,
+        'failed': memberIds.length,
+        'errors': ['Request failed: $e'],
+        'message': 'Request failed: $e',
+      };
+    }
   }
 }

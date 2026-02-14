@@ -253,6 +253,49 @@ class MembersProvider with ChangeNotifier {
     return result;
   }
 
+  /// Send reminder SMS to selected members with upcoming appointments
+  Future<Map<String, dynamic>> sendReminderSms() async {
+    final members = selectedMembers.where((m) => m.canReceiveSms && m.hasBookingDetails).toList();
+
+    if (members.isEmpty) {
+      return {'sent': 0, 'failed': 0, 'message': 'No members with valid phone numbers and booking details'};
+    }
+
+    final result = await _inviteService.sendReminderSmsAndroid(
+      members,
+      quarter: _targetQuarter > 0 ? _targetQuarter : null,
+      year: _targetYear > 0 ? _targetYear : null,
+    );
+
+    // Reload to update notification status
+    await loadMembers();
+
+    return {
+      ...result,
+      'message': 'Sent ${result['sent']} reminder SMS, ${result['failed']} failed',
+    };
+  }
+
+  /// Send reminder email to selected members with upcoming appointments
+  Future<Map<String, dynamic>> sendReminderEmail() async {
+    final members = selectedMembers.where((m) => m.canReceiveEmail && m.hasBookingDetails).toList();
+
+    if (members.isEmpty) {
+      return {'sent': 0, 'failed': 0, 'message': 'No members with valid email addresses and booking details'};
+    }
+
+    final result = await _inviteService.sendReminderEmailViaServer(
+      members,
+      quarter: _targetQuarter > 0 ? _targetQuarter : null,
+      year: _targetYear > 0 ? _targetYear : null,
+    );
+
+    // Reload to update notification status
+    await loadMembers();
+
+    return result;
+  }
+
   /// Get member details
   Future<Member?> getMemberDetail(int memberId) async {
     return await _apiService.getMemberDetail(

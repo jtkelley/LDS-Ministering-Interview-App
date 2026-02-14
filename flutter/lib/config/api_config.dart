@@ -1,11 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// API configuration for connecting to the Flask backend
 class ApiConfig {
   static const String _urlKey = 'api_base_url';
-  static const String defaultUrl = 'http://10.0.2.2:8181';
+  static const String debugUrl = 'http://10.0.2.2:8181';
+  static const String releaseUrl = 'https://jtkelley.pythonanywhere.com';
+  static String get defaultUrl => kReleaseMode ? releaseUrl : debugUrl;
 
-  static String _baseUrl = defaultUrl;
+  static String _baseUrl = kReleaseMode ? releaseUrl : debugUrl;
 
   /// Get the current base URL
   static String get baseUrl => _baseUrl;
@@ -41,6 +44,7 @@ class ApiConfig {
   static String memberDetailEndpoint(int id) => '/api/members/$id';
   static String logNotificationEndpoint(int id) => '/api/members/$id/log-notification';
   static const String bulkEmailEndpoint = '/api/notifications/send-bulk-email';
+  static const String reminderEmailEndpoint = '/api/notifications/send-reminder-email';
   static const String logBulkEndpoint = '/api/notifications/log-bulk';
   static const String messageTemplatesEndpoint = '/api/message-templates';
 
